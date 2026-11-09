@@ -3,7 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#121110">
+<meta name="theme-color" content="#0F0E0D">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Jurassic Feed"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
 <title>Jurassic Feed – Suivi d'animaux exotiques</title>
@@ -192,7 +197,7 @@ input[type=file]{padding:8px}
 /* ---------- Notifications & alertes ---------- */
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(88px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:10px;box-shadow:var(--sh2);background:var(--raise);color:var(--ink);border:1px solid var(--line-strong);padding:10px 14px;border-radius:var(--r-sm);z-index:60;font-size:.92rem;max-width:calc(100vw - 32px);animation:rise .18s var(--ease)}
 .toast.ok svg{color:var(--ok)}.toast.warn svg{color:var(--warn)}.toast.err svg{color:var(--bad)}
-.alert{display:flex;gap:10px;align-items:flex-start;box-shadow:var(--hi),var(--sh1);background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:11px 14px;font-size:.9rem;color:var(--mute);margin:12px 0}
+.alert{display:flex;gap:10px;align-items:flex-start;margin-bottom:18px;box-shadow:var(--hi),var(--sh1);background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:11px 14px;font-size:.9rem;color:var(--mute);margin:12px 0}
 .alert svg{margin-top:2px}
 .alert.warn{border-color:color-mix(in srgb,var(--warn) 38%,transparent);background:color-mix(in srgb,var(--warn) 6%,var(--card))}.alert.warn svg,.alert.warn b{color:var(--warn)}
 .alert.info b{color:var(--ink)}
@@ -379,60 +384,161 @@ function save(){S.rev=Date.now();try{localStorage.setItem(KEY,JSON.stringify(S))
 function migrate(){delete S.demo;if(!S.theme||S.theme==='auto')S.theme='dark';S.plans=S.plans||[];S.presets=S.presets||{};S.tasks=S.tasks||[];S.rev=S.rev||0}
 const hasData=()=>S.animals.length||S.logs.length||S.tasks.length||S.plans.length;
 
-/* ============ Synchronisation Google Drive ============
-   Le connecteur Drive crée des fichiers mais ne réécrit pas leur contenu :
-   chaque sauvegarde crée un nouveau fichier « jurassic-feed-data.json » puis met les anciens à la corbeille.
-   Résolution des conflits : la version la plus récente (S.rev) gagne. */
-const DRV={st:'init',fileId:null,last:null,err:null,code:null,busy:false,again:false,timer:null,checked:0,mcp:null,fileArgs:false};
+/* ============ Synchronisation cloud ============
+   Deux moteurs, même logique « la version la plus récente (S.rev) gagne » :
+   - A : connecteur Google Drive de Claude (page ouverte depuis claude.ai) ;
+   - B : Firebase / Firestore + connexion Google (application installée ou GitHub Pages). */
+const DRV={st:'init',mode:null,B:null,fileId:null,mod:null,last:null,err:null,code:null,busy:false,again:false,timer:null,checked:0,mcp:null,fileArgs:false};
 const SRV='Google Drive',FNAME='jurassic-feed-data.json';
 const b64dec=b=>{const bin=atob(b.replace(/-/g,'+').replace(/_/g,'/'));const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);return new TextDecoder().decode(u)};
 const pay=r=>r&&r.payload!==undefined?r.payload:r;
+const okData=d=>{if(!d||!Array.isArray(d.animals)||!Array.isArray(d.logs))throw {code:'tool_error',message:'format'};return d};
+const tmo=(p,ms)=>Promise.race([p,new Promise((_,rj)=>setTimeout(()=>rj({code:'unavailable',message:'timeout'}),ms))]);
+
+/* --- Moteur A : connecteur Google Drive de Claude --- */
+const mcpBackend={
+  async list(){
+    const r=pay(await DRV.mcp.callTool(SRV,'search_files',{query:`title = '${FNAME}' and trashed = false`,orderBy:'modifiedTime desc',pageSize:10,excludeContentSnippets:true}));
+    return (r&&r.files)||[];
+  },
+  async pull(f){const r=pay(await DRV.mcp.callTool(SRV,'download_file_content',{fileId:f.id}));return okData(JSON.parse(b64dec(r.content)))},
+  async push(json){
+    const base={title:FNAME,contentMimeType:'application/json',disableConversionToGoogleType:true};let input;
+    if(DRV.fileArgs)input={...base,base64Content:{$file:{data:new Blob([json],{type:'application/json'}),name:FNAME,type:'application/json'}}};
+    else if(json.length<850000)input={...base,textContent:json};
+    else throw {code:'too_big'};
+    const nf=pay(await DRV.mcp.callTool(SRV,'create_file',input));
+    if(!nf||!nf.id)throw {code:'upstream_error',message:'create'};
+    try{const all=await mcpBackend.list();for(const f of all)if(f.id!==nf.id)await DRV.mcp.callTool(SRV,'trash_file',{fileId:f.id})}catch(e){}
+    return {id:nf.id,modified:nf.modifiedTime};
+  }
+};
+
+/* --- Moteur B : Firebase (Auth Google + Firestore), cache hors-ligne intégré ---
+   Données : users/{uid}/state/c0..cN (texte découpé, < 1 Mo par document) + users/{uid}/state/meta {rev,n,at} */
+const FIREBASE_CONFIG={apiKey:"AIzaSyCzVFOnoaXMeXFJ_SqnGKpIjo5rpgwZ484",authDomain:"jurassic-feed.firebaseapp.com",projectId:"jurassic-feed",storageBucket:"jurassic-feed.firebasestorage.app",messagingSenderId:"338394662830",appId:"1:338394662830:web:8264a130794573440eea3f"}; /* collée ici par le développeur ; sinon saisie dans Réglages */
+const FBCFG_KEY=KEY+'.fbcfg',FB_BASE='https://www.gstatic.com/firebasejs/10.14.1/',CHUNK=300000;
+const FB={mod:null,app:null,auth:null,db:null,user:null,unsub:null,n:0};
+const fbCfg=()=>{if(FIREBASE_CONFIG)return FIREBASE_CONFIG;try{const c=JSON.parse(localStorage.getItem(FBCFG_KEY)||'null');return c&&c.apiKey&&c.projectId&&c.appId?c:null}catch(e){return null}};
+function parseFbCfg(t){
+  const c={};['apiKey','authDomain','projectId','storageBucket','messagingSenderId','appId'].forEach(k=>{
+    const m=String(t).match(new RegExp(k+'["\']?\\s*:\\s*["\']([^"\']+)["\']'));if(m)c[k]=m[1].trim()});
+  return c.apiKey&&c.projectId&&c.appId?c:null;
+}
+async function fbLoad(){
+  if(window.__FBMOCK){FB.mod=window.__FBMOCK;return FB.mod}
+  if(FB.mod)return FB.mod;
+  try{
+    const [a,au,fs]=await Promise.all([import(FB_BASE+'firebase-app.js'),import(FB_BASE+'firebase-auth.js'),import(FB_BASE+'firebase-firestore.js')]);
+    FB.mod={...a,...au,...fs};
+  }catch(e){throw {code:'fb_blocked'}}
+  return FB.mod;
+}
+const fbCol=()=>FB.mod.collection(FB.db,'users',FB.user.uid,'state');
+const fbBackend={
+  async list(){
+    const m=FB.mod;const s=await tmo(m.getDoc(m.doc(FB.db,'users',FB.user.uid,'state','meta')),15000);
+    if(!s.exists())return [];
+    const d=s.data();FB.n=d.n||0;return [{id:'meta',modifiedTime:String(d.rev||0)}];
+  },
+  async pull(){
+    const m=FB.mod;const snap=await tmo(m.getDocs(fbCol()),20000);
+    let meta=null;const ch=[];
+    snap.forEach(x=>{if(x.id==='meta')meta=x.data();else if(/^c\d+$/.test(x.id))ch.push([+x.id.slice(1),(x.data()||{}).s||''])});
+    ch.sort((a,b)=>a[0]-b[0]);
+    const n=(meta&&meta.n)||0;if(!n||ch.length<n)throw {code:'upstream_error',message:'chunks'};
+    FB.n=n;
+    return okData(JSON.parse(ch.slice(0,n).map(c=>c[1]).join('')));
+  },
+  async push(json){
+    const m=FB.mod,rev=S.rev,col=fbCol(),parts=[];
+    for(let i=0;i<json.length;i+=CHUNK)parts.push(json.slice(i,i+CHUNK));
+    if(!parts.length)parts.push('');
+    const b=m.writeBatch(FB.db);
+    parts.forEach((s,i)=>b.set(m.doc(col,'c'+i),{s}));
+    for(let i=parts.length;i<(FB.n||0);i++)b.delete(m.doc(col,'c'+i));
+    b.set(m.doc(col,'meta'),{rev,n:parts.length,at:Date.now()});
+    await tmo(b.commit(),15000);
+    FB.n=parts.length;
+    return {id:'meta',modified:String(rev)};
+  }
+};
+function fbUnlisten(){if(FB.unsub){try{FB.unsub()}catch(e){}FB.unsub=null}}
+function fbListen(){
+  fbUnlisten();const m=FB.mod;
+  try{FB.unsub=m.onSnapshot(m.doc(FB.db,'users',FB.user.uid,'state','meta'),s=>{
+    if(s.metadata&&s.metadata.hasPendingWrites)return;
+    if(!s.exists())return;
+    const r=(s.data()||{}).rev||0;
+    if(r>(S.rev||0)&&!DRV.busy&&DRV.B)driveSync(false);
+  },()=>{})}catch(e){}
+}
+function fbOnUser(u){
+  FB.user=u||null;
+  if(!u){fbUnlisten();DRV.B=null;DRV.fileId=null;DRV.mod=null;DRV.st='signin';renderSync();return}
+  DRV.B=fbBackend;DRV.fileId=null;DRV.mod=null;FB.n=0;
+  fbListen();driveSync(true);
+}
+async function fbStart(cfg){
+  const m=await fbLoad();
+  FB.app=m.initializeApp(cfg);
+  FB.auth=m.getAuth(FB.app);
+  try{FB.db=m.initializeFirestore(FB.app,{localCache:m.persistentLocalCache({tabManager:m.persistentMultipleTabManager()})})}
+  catch(e){FB.db=m.getFirestore(FB.app)}
+  await new Promise(res=>{let first=true;m.onAuthStateChanged(FB.auth,u=>{fbOnUser(u);if(first){first=false;res()}},e=>{drvFail(e);if(first){first=false;res()}})});
+}
+async function fbSignIn(){
+  try{const m=await fbLoad();await m.signInWithPopup(FB.auth,new m.GoogleAuthProvider())}catch(e){drvFail(e)}
+}
+async function fbSignOut(){try{await FB.mod.signOut(FB.auth)}catch(e){drvFail(e)}}
+
 async function drvInit(){
   const local=()=>{DRV.st='local';renderSync()};
   try{
-    if(!window.claude||!claude.use)return local();
-    DRV.mcp=await Promise.race([claude.use('mcp'),new Promise(r=>setTimeout(()=>r(null),10000))]);
-    if(!DRV.mcp)return local();
-    try{const l=await DRV.mcp.listTools();DRV.fileArgs=!!l.fileArgs}catch(e){}
-  }catch(e){return local()}
-  await driveSync(true);
+    if(window.claude&&claude.use){
+      DRV.mcp=await Promise.race([claude.use('mcp'),new Promise(r=>setTimeout(()=>r(null),10000))]);
+      if(DRV.mcp){DRV.mode='mcp';DRV.B=mcpBackend;try{const l=await DRV.mcp.listTools();DRV.fileArgs=!!l.fileArgs}catch(e){}return driveSync(true)}
+      return local();
+    }
+  }catch(e){}
+  const cfg=fbCfg();
+  if(!cfg)return local();
+  DRV.mode='fb';DRV.st='init';renderSync();
+  try{await fbStart(cfg)}catch(e){drvFail(e)}
 }
 function drvFail(e){
   const c=e&&e.code||'upstream_error';DRV.code=c;
-  if(c==='approval_required'||c==='not_in_manifest'||c==='consent_required'||c==='not_granted'){DRV.st='consent'}
+  if(c==='auth/popup-closed-by-user'||c==='auth/cancelled-popup-request'||c==='auth/user-cancelled'){DRV.st='signin'}
+  else if(c==='auth/popup-blocked'){DRV.st='popup'}
+  else if(c==='auth/unauthorized-domain'){DRV.st='domain'}
+  else if(c==='auth/operation-not-allowed'||c==='auth/configuration-not-found'){DRV.st='noprov'}
+  else if(c==='auth/invalid-api-key'||c==='auth/api-key-not-valid'||c==='auth/invalid-app-credential'){DRV.st='badcfg'}
+  else if(c==='permission-denied'){DRV.st='rules'}
+  else if(c==='fb_blocked'){DRV.st='gblocked'}
+  else if(c==='approval_required'||c==='not_in_manifest'||c==='consent_required'||c==='not_granted'){DRV.st='consent'}
   else if(c==='needs_reauth'||c==='server_not_connected'||c==='selection_required'||c==='server_not_found'){DRV.st='connect'}
   else if(c==='blocked_by_policy'){DRV.st='blocked'}
   else if(c==='capability_disabled'||c==='capability_removed'){DRV.st='local'}
-  else{DRV.st='error';DRV.err=(e&&e.message)||'';clearTimeout(DRV.retry);DRV.retry=setTimeout(()=>{if(localStorage.getItem(KEY+'.dirty'))drivePush();else driveSync(false)},30000)}
+  else{DRV.st='error';DRV.err=(e&&e.message)||'';clearTimeout(DRV.retry);DRV.retry=setTimeout(()=>{if(!DRV.B)return;if(localStorage.getItem(KEY+'.dirty'))drivePush();else driveSync(false)},30000)}
   renderSync();
 }
-const drvList=async()=>{
-  const r=pay(await DRV.mcp.callTool(SRV,'search_files',{query:`title = '${FNAME}' and trashed = false`,orderBy:'modifiedTime desc',pageSize:10,excludeContentSnippets:true}));
-  return (r&&r.files)||[];
-};
-async function drvPull(f){
-  const r=pay(await DRV.mcp.callTool(SRV,'download_file_content',{fileId:f.id}));
-  const d=JSON.parse(b64dec(r.content));
-  if(!Array.isArray(d.animals)||!Array.isArray(d.logs))throw {code:'tool_error',message:'format'};
-  return d;
-}
-/* Lecture : adopte la version Drive si elle est plus récente ; renvoie vrai si Drive est en retard (il faut pousser) */
+/* Lecture : adopte la version distante si elle est plus récente (S.rev) ; pousse si c'est la locale */
 async function driveSync(first){
-  if(!DRV.mcp||DRV.busy)return;
+  if(!DRV.B||DRV.busy)return;
   DRV.busy=true;DRV.st=first&&!hasData()?'loading':'sync';renderSync();if(DRV.st==='loading')render();
   let push=false;
   try{
-    const files=await drvList();
+    const files=await DRV.B.list();
     if(files.length){
       const f=files[0];
-      if(f.id!==DRV.fileId){
-        const d=await drvPull(f);
+      if(f.modifiedTime!==DRV.mod||f.id!==DRV.fileId){
+        const d=await DRV.B.pull(f);
         if((d.rev||0)>(S.rev||0)){
           const th=S.theme;S=d;migrate();S.theme=th||S.theme;try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}
           view.animal=null;try{localStorage.removeItem(KEY+'.dirty')}catch(e){}
         }else if((d.rev||0)<(S.rev||0))push=true;
       }
-      DRV.fileId=f.id;
+      DRV.fileId=f.id;DRV.mod=f.modifiedTime;
     }else if(hasData())push=true;
     DRV.st='ok';DRV.last=Date.now();DRV.checked=Date.now();DRV.err=null;
   }catch(e){DRV.busy=false;drvFail(e);if(first)render();return}
@@ -443,66 +549,84 @@ async function driveSync(first){
   if(push||localStorage.getItem(KEY+'.dirty'))drivePush();
 }
 function driveDirty(){
-  if(!DRV.mcp)return;
+  if(!DRV.B)return;
   try{localStorage.setItem(KEY+'.dirty','1')}catch(e){}
   clearTimeout(DRV.timer);DRV.timer=setTimeout(drivePush,2500);
   if(DRV.st==='ok'||DRV.st==='sync')DRV.st='pending';renderSync();
 }
 async function drivePush(){
-  if(!DRV.mcp)return;
+  if(!DRV.B)return;
   if(DRV.busy){DRV.again=true;return}
   DRV.busy=true;DRV.st='saving';renderSync();
   try{
     const json=JSON.stringify(S),sent=S.rev;
-    const base={title:FNAME,contentMimeType:'application/json',disableConversionToGoogleType:true};
-    let input;
-    if(DRV.fileArgs)input={...base,base64Content:{$file:{data:new Blob([json],{type:'application/json'}),name:FNAME,type:'application/json'}}};
-    else if(json.length<850000)input={...base,textContent:json};
-    else throw {code:'too_big',message:'volumineux'};
-    const nf=pay(await DRV.mcp.callTool(SRV,'create_file',input));
-    if(!nf||!nf.id)throw {code:'upstream_error',message:'create'};
-    DRV.fileId=nf.id;
-    try{const all=await drvList();for(const f of all)if(f.id!==nf.id)await DRV.mcp.callTool(SRV,'trash_file',{fileId:f.id})}catch(e){}
+    const nf=await DRV.B.push(json);
+    DRV.fileId=nf.id;DRV.mod=nf.modified||DRV.mod;
     if(S.rev===sent)try{localStorage.removeItem(KEY+'.dirty')}catch(e){}
     DRV.st='ok';DRV.last=Date.now();DRV.err=null;
   }catch(e){DRV.busy=false;if(e&&e.code==='too_big'){DRV.st='big';renderSync();return}drvFail(e);return}
   DRV.busy=false;
-  if(DRV.again||S.rev!==undefined&&localStorage.getItem(KEY+'.dirty')){DRV.again=false;clearTimeout(DRV.timer);DRV.timer=setTimeout(drivePush,1500)}
+  if(DRV.again||localStorage.getItem(KEY+'.dirty')){DRV.again=false;clearTimeout(DRV.timer);DRV.timer=setTimeout(drivePush,1500)}
   renderSync();
 }
 document.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState==='visible'&&DRV.mcp&&!DRV.busy&&Date.now()-DRV.checked>20000)driveSync(false);
+  if(document.visibilityState==='visible'&&DRV.B&&!DRV.busy&&DRV.st!=='signin'&&Date.now()-DRV.checked>20000)driveSync(false);
 });
-window.addEventListener('online',()=>{if(DRV.mcp&&DRV.st==='error')driveSync(false)});
+window.addEventListener('online',()=>{if(DRV.B&&DRV.st==='error')driveSync(false)});
 function ago2(t){const m=Math.round((Date.now()-t)/60000);return m<1?"à l'instant":m<60?`il y a ${m} min`:`il y a ${Math.round(m/60)} h`}
 const SYNCV={
-  init:['','Drive…','muted'],loading:['','Chargement…','muted'],sync:['','Synchronisation…','muted'],pending:['','À enregistrer…','muted'],saving:['','Enregistrement…','muted'],
-  ok:['ok','Drive à jour','ok'],local:['','Local seulement','muted'],consent:['alert','Autoriser Drive','warn'],connect:['alert','Drive non connecté','warn'],
-  blocked:['alert','Drive bloqué','warn'],error:['alert','Drive injoignable','warn'],big:['alert','Trop volumineux','warn']
+  init:['','Cloud…','muted'],loading:['','Chargement…','muted'],sync:['','Synchronisation…','muted'],pending:['','À enregistrer…','muted'],saving:['','Enregistrement…','muted'],
+  ok:['ok','Cloud à jour','ok'],local:['','Local seulement','muted'],consent:['alert','Autoriser Drive','warn'],connect:['alert','Drive non connecté','warn'],
+  signin:['alert','Se connecter','warn'],gblocked:['alert','Firebase bloqué','warn'],popup:['alert','Fenêtre bloquée','warn'],domain:['alert','Domaine non autorisé','warn'],
+  noprov:['alert','Google non activé','warn'],badcfg:['alert','Config invalide','warn'],rules:['alert','Règles Firestore','warn'],
+  blocked:['alert','Cloud bloqué','warn'],error:['alert','Cloud injoignable','warn'],big:['alert','Trop volumineux','warn']
 };
 function renderSync(){
   const v=SYNCV[DRV.st]||SYNCV.init;
+  const lab=DRV.mode==='mcp'?v[1].replace('Cloud','Drive'):v[1];
   const icon=v[0]==='ok'?'check':v[0]==='alert'?'alert':'cloud';
-  const html=`<button class="sync ${v[2]}" data-act="syncInfo" aria-label="Synchronisation Google Drive : ${v[1]}">${ic(icon)}<span>${v[1]}</span></button>`;
+  const html=`<button class="sync ${v[2]}" data-act="syncInfo" aria-label="Synchronisation : ${lab}">${ic(icon)}<span>${lab}</span></button>`;
   document.querySelectorAll('[data-sync]').forEach(el=>el.innerHTML=html);
-  document.querySelectorAll('.syncCard').forEach(c=>c.innerHTML=syncCardHTML());
+  document.querySelectorAll('.syncCard').forEach(c=>{const t=document.activeElement&&document.activeElement.tagName;if(!c.contains(document.activeElement)||(t!=='INPUT'&&t!=='TEXTAREA'))c.innerHTML=syncCardHTML()});
 }
 function syncMsg(){
+  const mcp=DRV.mode==='mcp',N=mcp?'Google Drive':'le cloud';
   switch(DRV.st){
-    case'ok':return `Tes données sont enregistrées dans ton Google Drive${DRV.last?' ('+ago2(DRV.last)+')':''}. Elles sont reprises automatiquement à chaque ouverture, sur tous tes appareils.`;
-    case'pending':case'saving':return 'Enregistrement dans Google Drive en cours…';
-    case'loading':case'sync':case'init':return 'Connexion à Google Drive…';
+    case'ok':return `Tes données sont enregistrées ${mcp?'dans ton Google Drive':'dans le cloud'}${DRV.last?' ('+ago2(DRV.last)+')':''}. Elles sont reprises automatiquement à chaque ouverture, sur tous tes appareils.`;
+    case'pending':case'saving':return `Enregistrement dans ${N} en cours…`;
+    case'loading':case'sync':case'init':return `Connexion à ${mcp?'Google Drive':'Firebase'}…`;
     case'consent':return "Autorise l'accès à Google Drive quand Claude te le demande, puis réessaie. Tes données restent sur cet appareil en attendant.";
     case'connect':return "Google Drive n'est pas connecté à ton compte Claude. Ajoute-le dans claude.ai → Réglages → Connecteurs, puis réessaie.";
-    case'blocked':return "Ton organisation bloque l'accès à Google Drive depuis cette application.";
-    case'big':return 'Les données dépassent la taille acceptée pour une sauvegarde automatique (photos trop nombreuses ?). Utilise Exporter, ou supprime des photos.';
-    case'error':return 'Google Drive ne répond pas pour le moment. Tes données sont gardées sur cet appareil et la sauvegarde sera retentée.';
-    default:return "Cette vue ne peut pas accéder à Google Drive : les données restent sur cet appareil. Ouvre l'application depuis claude.ai (web ou mobile) pour activer la sauvegarde Drive.";
+    case'signin':return 'Connecte-toi avec ton compte Google pour activer la sauvegarde automatique. Tes données restent sur cet appareil en attendant.';
+    case'gblocked':return "Firebase n'a pas pu se charger (réseau, bloqueur de publicités ?). Réessaie après l'avoir désactivé pour ce site.";
+    case'popup':return "Le navigateur a bloqué la fenêtre de connexion Google. Autorise les fenêtres pop-up pour ce site puis réessaie.";
+    case'domain':return "Ce site n'est pas dans les domaines autorisés de Firebase. Dans Firebase → Authentication → Paramètres → Domaines autorisés, ajoute : "+esc(location.hostname||'ce site');
+    case'noprov':return "La connexion Google n'est pas activée dans Firebase : Authentication → Méthode de connexion → Google → Activer.";
+    case'badcfg':return "La configuration Firebase semble invalide (clé API). Vérifie-la ou colle-la à nouveau.";
+    case'rules':return "Firestore refuse l'accès : les règles de sécurité ne sont pas publiées ou ne correspondent pas. Recopie les règles de l'aide, puis Publier.";
+    case'blocked':return "Ton organisation bloque l'accès à cette sauvegarde depuis cette application.";
+    case'big':return 'Les données dépassent la taille acceptée pour une sauvegarde automatique (photos trop nombreuses ?). Utilise la sauvegarde par fichier, ou supprime des photos.';
+    case'error':return `${mcp?'Google Drive':'Le cloud'} ne répond pas pour le moment. Tes données sont gardées sur cet appareil et la sauvegarde sera retentée.`;
+    default:return DRV.mcp||window.claude?"Cette vue ne peut pas accéder à Google Drive : les données restent sur cet appareil.":"Pour retrouver tes données sur tous tes appareils, colle ci-dessous la configuration Firebase de ton projet, puis connecte-toi avec Google. Tes données restent sur cet appareil en attendant.";
   }
 }
 function syncCardHTML(){
-  const can=DRV.mcp&&!['loading','sync','saving'].includes(DRV.st);
-  return `<p class="muted" style="margin-top:0">${syncMsg()}</p>${can?`<button class="btn sec block" data-act="syncNow">${ic('cloud')} Synchroniser maintenant</button>`:''}`;
+  const busy=['loading','sync','saving','init'].includes(DRV.st);
+  let h=`<p class="muted" style="margin-top:0">${syncMsg()}</p>`;
+  if(DRV.mode==='mcp'){if(!busy)h+=`<button class="btn sec block" data-act="syncNow">${ic('cloud')} Synchroniser maintenant</button>`;return h}
+  if(DRV.mode==='fb'){
+    if(FB.user){
+      h+=`<p class="muted">Compte : ${esc(FB.user.email||'connecté')}</p>`;
+      if(!busy)h+=`<button class="btn sec block" data-act="syncNow">${ic('cloud')} Synchroniser maintenant</button>`;
+      h+=`<button class="btn sec block" data-act="fbout" style="margin-top:8px">Se déconnecter</button>`;
+    }else if(!busy)h+=`<button class="btn block" data-act="fbin">${ic('cloud')} Se connecter avec Google</button>`;
+    if(!FIREBASE_CONFIG)h+=`<button class="btn sec block" data-act="fbclear" style="margin-top:8px">Changer la configuration</button>`;
+    return h;
+  }
+  if(!(window.claude&&claude.use)){
+    h+=`<label>Configuration Firebase</label><textarea class="fbIn" rows="6" autocomplete="off" spellcheck="false" placeholder="const firebaseConfig = {&#10;  apiKey: &quot;…&quot;,&#10;  authDomain: &quot;…&quot;,&#10;  projectId: &quot;…&quot;,&#10;  appId: &quot;…&quot;&#10;};"></textarea><button class="btn block" data-act="fbsave" style="margin-top:8px">Enregistrer la configuration</button>`;
+  }
+  return h;
 }
 const A=id=>S.animals.find(a=>a.id===id);
 
@@ -925,7 +1049,7 @@ function render(){
   const tabs=[['today','','Accueil'],['animals','','Animaux'],['journal','','Journal'],['agenda','','Agenda'],['stats','','Stats'],['settings','','Réglages']];
   $('#nav').innerHTML=tabs.map(([k,i,n])=>`<button data-act="tab" data-v="${k}" class="${view.tab===k&&!view.animal?'on':''}"><svg viewBox="0 0 24 24" aria-hidden="true">${ICON[k]}</svg>${n}</button>`).join('');
   let h='';
-  if(DRV.st==='loading'&&!hasData()){$('#app').innerHTML=`<div class="loadbox"><div class="spin"></div><div>Chargement depuis Google Drive…</div></div>`;const f0=$('#fab');if(f0)f0.remove();renderSync();return}
+  if(DRV.st==='loading'&&!hasData()){$('#app').innerHTML=`<div class="loadbox"><div class="spin"></div><div>Chargement de tes données…</div></div>`;const f0=$('#fab');if(f0)f0.remove();renderSync();return}
   if(memOnly)h+=`<div class="alert warn" role="alert">${ic('alert')}<div><b>Stockage indisponible.</b> Tes données ne seront pas conservées sur cet appareil. Utilise Réglages → Exporter.</div></div>`;
   if(view.animal&&A(view.animal))h+=vDetail(A(view.animal));
   else{view.animal=null;h+=({today:vToday,animals:vAnimals,journal:vJournal,agenda:vAgenda,stats:vStats,settings:vSettings})[view.tab]()}
@@ -941,7 +1065,7 @@ function vToday(){
     .filter(x=>x.s.n<=1).sort((a,b)=>a.s.n-b.s.n);
   const late=tasks.filter(x=>x.s.k==='late').length;
   const hello=new Date().getHours()<18?'Bonjour':'Bonsoir';
-  let h=`<h1>${hello}</h1><p class="sub">${new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}</p>`;
+  let h=`<h1>${hello}</h1><p class="sub">${new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}</p>`+backupAlert();
   if(!S.animals.length){h+=`<div class="card hero"><div class="ico">${ic('generic')}</div><h2>Bienvenue dans Jurassic Feed</h2><p>Ajoute ton premier animal pour suivre repas, mues, mesures et reproduction. Tout est enregistré automatiquement dans ton Google Drive.</p><button class="btn" data-act="newAnimal">${ic('plus')} Ajouter mon premier animal</button></div>`;return h}
   h+=`<div class="grid3"><div class="card stat"><b>${alive.length}</b><div class="muted">animaux</div></div>
    <div class="card stat ${late?'bad':''}"><b>${late}</b><div class="muted">en retard</div></div>
@@ -1042,8 +1166,13 @@ function vSettings(){
   ${presetsCard()}
   <h2>Sauvegarde</h2>
   <div class="card syncCard">${syncCardHTML()}</div>
-  <div class="card"><p class="muted" style="margin-top:0">Copie de secours manuelle (texte à garder ou à transférer).</p>
-  <div class="grid2"><button class="btn sec" data-act="export">${ic('upload')} Exporter</button><button class="btn sec" data-act="import">${ic('download')} Importer</button></div></div>
+  <div class="card"><p class="muted" style="margin-top:0">Enregistre un fichier de sauvegarde, par exemple dans Google Drive : le menu de partage te laisse choisir où. Indispensable si tu vides le navigateur ou changes de téléphone.</p>
+  <button class="btn block" data-act="backupFile">${ic('upload')} Enregistrer une sauvegarde</button>
+  <button class="btn sec block" data-act="restoreFile" style="margin-top:8px">${ic('download')} Restaurer depuis un fichier</button>
+  <p class="muted" style="margin:12px 0 0">${bkLabel()}</p>
+  <div class="grid2" style="margin-top:12px"><button class="btn sec sm" data-act="export">Copier le texte</button><button class="btn sec sm" data-act="import">Coller le texte</button></div></div>
+  <h2>Application</h2>
+  <div class="card">${appCardHTML()}</div>
   <h2>Données</h2>
   <div class="card"><button class="btn bad block" data-act="wipe">Tout effacer</button></div>
   <h2>À propos</h2><div class="card muted">Jurassic Feed<br>${S.animals.length} animaux · ${S.logs.length} entrées · ${S.tasks.length} rappels</div>`;
@@ -1211,8 +1340,59 @@ function exportSheet(){
   });
 }
 function syncSheet(){
-  sheet(`<h3>Google Drive</h3><div class="syncCard" style="margin-top:10px">${syncCardHTML()}</div><button class="btn sec block" data-close style="margin-top:12px">Fermer</button>`,el=>{el.querySelector('[data-close]').onclick=closeSheet});
+  sheet(`<h3>Sauvegarde en ligne</h3><div class="syncCard" style="margin-top:10px">${syncCardHTML()}</div><button class="btn sec block" data-close style="margin-top:12px">Fermer</button>`,el=>{el.querySelector('[data-close]').onclick=closeSheet});
 }
+/* ============ Sauvegarde sur fichier, installation, stockage durable ============ */
+const BK_KEY=KEY+'.bk';
+const lastBackup=()=>{try{return +localStorage.getItem(BK_KEY)||0}catch(e){return 0}};
+const markBackup=()=>{try{localStorage.setItem(BK_KEY,String(Date.now()))}catch(e){}};
+const dayStamp=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
+function bkLabel(){const t=lastBackup();if(!t)return 'Aucune sauvegarde sur fichier pour le moment.';const d=Math.floor((Date.now()-t)/86400000);return d<1?"Dernière sauvegarde : aujourd'hui.":`Dernière sauvegarde : il y a ${d} j.`}
+async function backupFile(){
+  const json=JSON.stringify(S),name=`jurassic-feed-sauvegarde-${dayStamp()}.json`;
+  let file=null;try{file=new File([json],name,{type:'application/json'})}catch(e){}
+  if(file&&navigator.canShare&&navigator.canShare({files:[file]})){
+    try{await navigator.share({files:[file],title:'Sauvegarde Jurassic Feed'});markBackup();toast('Sauvegarde enregistrée');render();return}
+    catch(e){if(e&&e.name==='AbortError')return}
+  }
+  if(DRV.mode==='mcp'){toast('Ici, la sauvegarde est faite par Google Drive. Copie le texte si besoin');exportSheet();return}
+  try{
+    const url=URL.createObjectURL(new Blob([json],{type:'application/json'}));
+    const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000);
+    markBackup();toast('Sauvegarde téléchargée : cherche-la dans tes Téléchargements');render();
+  }catch(e){exportSheet()}
+}
+function restoreFile(){
+  const inp=document.createElement('input');inp.type='file';inp.accept='.json,application/json,text/plain';
+  inp.onchange=()=>{const f=inp.files&&inp.files[0];if(!f)return;
+    const r=new FileReader();
+    r.onload=()=>{let d;try{d=JSON.parse(r.result);if(!Array.isArray(d.animals)||!Array.isArray(d.logs))throw 0}catch(e){toast('Fichier invalide : ce n\'est pas une sauvegarde Jurassic Feed');return}
+      confirmSheet(`Remplacer les données actuelles par cette sauvegarde (${d.animals.length} animaux, ${d.logs.length} entrées) ?`,()=>{
+        d.tasks=d.tasks||[];const th=S.theme;S=d;migrate();S.theme=th||S.theme;save();closeSheet();view.animal=null;view.tab='today';toast('Sauvegarde restaurée');render()});
+    };r.readAsText(f)};
+  inp.click();
+}
+let installEv=null;
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installEv=e;try{if(view.tab==='settings')render()}catch(x){}});
+window.addEventListener('appinstalled',()=>{installEv=null;toast('Application installée');try{render()}catch(x){}});
+const isStandalone=()=>{try{return matchMedia('(display-mode: standalone)').matches||navigator.standalone===true}catch(e){return false}};
+let persisted=null;
+if(navigator.storage&&navigator.storage.persist){navigator.storage.persist().then(v=>{persisted=v;try{if(view.tab==='settings')render()}catch(e){}}).catch(()=>{})}
+function appCardHTML(){
+  let h='';
+  if(isStandalone())h+=`<p class="muted" style="margin:0 0 10px">${ic('check')} Application installée sur cet appareil.</p>`;
+  else if(installEv)h+=`<button class="btn block" data-act="install">${ic('plus')} Installer l'application</button>`;
+  else h+=`<p class="muted" style="margin:0 0 10px">Pour l'installer sur Android : menu ⋮ de Chrome → « Installer l'application » (ou « Ajouter à l'écran d'accueil »).</p>`;
+  h+=`<p class="muted" style="margin:10px 0 0">${persisted===true?'Stockage protégé : Android évite de supprimer automatiquement tes données.':'Stockage non protégé : si tu vides les données du navigateur, tout est effacé. Garde une sauvegarde à jour.'}</p>`;
+  return h;
+}
+function backupAlert(){
+  if(!hasData()||DRV.st==='ok')return '';
+  const t=lastBackup(),d=t?Math.floor((Date.now()-t)/86400000):999;
+  if(t&&d<14)return '';
+  return `<div class="alert warn" role="alert">${ic('alert')}<div><b>Pense à sauvegarder.</b> ${t?`Dernière sauvegarde il y a ${d} j.`:'Aucune sauvegarde sur fichier.'} Si tu vides le navigateur ou changes de téléphone, tes données seraient perdues.<div style="margin-top:10px"><button class="btn sm" data-act="backupFile">Enregistrer une sauvegarde</button></div></div></div>`;
+}
+if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){window.addEventListener('load',()=>{try{navigator.serviceWorker.register('sw.js').catch(()=>{})}catch(e){}})}
 function importSheet(){
   sheet(`<h3>Importer</h3><p class="muted">Colle ici un export Jurassic Feed. Cela remplace les données actuelles.</p><textarea id="im" style="min-height:160px;font-size:.75rem"></textarea>
   <div class="grid2" style="margin-top:12px"><button class="btn sec" data-close>Annuler</button><button class="btn" id="go">Importer</button></div>`,el=>{
@@ -1259,8 +1439,17 @@ document.addEventListener('click',e=>{
     case'export':return exportSheet();
     case'import':return importSheet();
     case'syncInfo':return syncSheet();
+    case'backupFile':return backupFile();
+    case'restoreFile':return restoreFile();
+    case'install':{if(!installEv)return;installEv.prompt();installEv.userChoice.finally(()=>{installEv=null;render()});return}
+    case'fbsave':{const t=el.closest('.syncCard').querySelector('textarea');const c=parseFbCfg(t?t.value:'');
+      if(!c){toast('Configuration non reconnue : colle tout le bloc firebaseConfig','err');return}
+      try{localStorage.setItem(FBCFG_KEY,JSON.stringify(c))}catch(e){}toast('Configuration enregistrée');setTimeout(()=>location.reload(),400);return}
+    case'fbclear':return confirmSheet('Changer la configuration Firebase ? Tes données restent sur cet appareil et dans le cloud.',()=>{try{localStorage.removeItem(FBCFG_KEY)}catch(e){}location.reload()});
+    case'fbin':return fbSignIn();
+    case'fbout':return fbSignOut();
     case'syncNow':{DRV.checked=0;DRV.st='sync';renderSync();return driveSync(false).then(()=>{if(DRV.st==='ok'&&hasData()&&localStorage.getItem(KEY+'.dirty'))return drivePush()})}
-    case'wipe':return confirmSheet('Effacer définitivement tous les animaux et l\'historique ? La copie dans Google Drive sera aussi remplacée.',()=>{S={v:1,theme:S.theme,animals:[],logs:[],tasks:[],plans:[],presets:S.presets||{}};save();view.animal=null;closeSheet();render()});
+    case'wipe':return confirmSheet('Effacer définitivement tous les animaux et l\'historique ? La copie sauvegardée en ligne sera aussi remplacée.',()=>{S={v:1,theme:S.theme,animals:[],logs:[],tasks:[],plans:[],presets:S.presets||{}};save();view.animal=null;closeSheet();render()});
     default:return;
   }
   render();
