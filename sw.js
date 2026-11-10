@@ -1,12 +1,12 @@
 /* Jurassic Feed — fonctionnement hors ligne.
    Incrémente VERSION à chaque nouvelle version de l'application pour forcer la mise à jour. */
-const VERSION='jf-v2';
+const VERSION='jf-v3';
 const SHELL=['./','./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
 self.addEventListener('install',e=>{
-  e.waitUntil(caches.open(VERSION).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting()));
+  e.waitUntil(caches.open(VERSION).then(c=>c.addAll(SHELL.map(u=>new Request(u,{cache:'reload'})))).then(()=>self.skipWaiting()));
 });
 self.addEventListener('activate',e=>{
-  e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==VERSION).map(k=>caches.delete(k)))).then(()=>self.clients.claim()));
+  e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==VERSION&&k!=='jf-data').map(k=>caches.delete(k)))).then(()=>self.clients.claim()));
 });
 self.addEventListener('fetch',e=>{
   const r=e.request;
@@ -22,5 +22,34 @@ self.addEventListener('fetch',e=>{
     if(res)return res;
     if(r.mode==='navigate')return c.match('./index.html');
     return new Response('',{status:504});
+  }));
+});
+
+/* Notifications : réveil périodique (Android, application installée) et clic sur la notification */
+async function dueCheck(){
+  const c=await caches.open('jf-data'),r=await c.match('jf-due.json');
+  if(!r)return;
+  const o=await r.json();
+  if(!o.on)return;
+  const now=new Date();
+  if(now.getHours()<(o.hour||9))return;
+  const td=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-'+String(now.getDate()).padStart(2,'0');
+  if((o.last||'')>=td)return;
+  const end=new Date(now);end.setHours(0,0,0,0);
+  const items=(o.items||[]).filter(i=>i.ts<=end.getTime());
+  if(!items.length)return;
+  const late=items.filter(i=>i.ts<end.getTime()).length;
+  await self.registration.showNotification('Jurassic Feed · '+items.length+' à faire'+(late?' ('+late+' en retard)':''),{
+    body:items.slice(0,4).map(i=>i.label).join('\n')+(items.length>4?'\n+ '+(items.length-4)+' autres':''),
+    icon:'icon-192.png',badge:'icon-192.png',tag:'jf-daily'});
+  o.last=td;
+  await c.put('jf-due.json',new Response(JSON.stringify(o),{headers:{'Content-Type':'application/json'}}));
+}
+self.addEventListener('periodicsync',e=>{if(e.tag==='jf-due')e.waitUntil(dueCheck())});
+self.addEventListener('notificationclick',e=>{
+  e.notification.close();
+  e.waitUntil(clients.matchAll({type:'window',includeUncontrolled:true}).then(l=>{
+    for(const c of l){if('focus' in c)return c.focus()}
+    return clients.openWindow('./');
   }));
 });

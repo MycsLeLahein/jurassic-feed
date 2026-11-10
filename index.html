@@ -133,6 +133,12 @@ svg.i{width:1.15em;height:1.15em;vertical-align:-.2em;stroke:currentColor;fill:n
 .fab:active{transform:scale(.96)}
 
 /* ---------- Puces, filtres, étiquettes d'état ---------- */
+.wd{display:flex;gap:6px;flex-wrap:wrap}.wd label{margin:0;text-transform:none;letter-spacing:0;font-size:.9rem;font-weight:500;color:var(--mute);position:relative}
+.wd input{position:absolute;opacity:0;width:1px;min-height:0;height:1px;padding:0}
+.wd span{display:inline-flex;align-items:center;justify-content:center;min-width:46px;min-height:40px;padding:0 10px;border:1px solid var(--line-strong);border-radius:var(--r-sm);cursor:pointer;color:var(--mute)}
+.wd input:checked+span{background:var(--accent);border-color:var(--accent);color:var(--pri-ink);font-weight:600}
+.wd input:focus-visible+span{outline:2px solid var(--accent-line);outline-offset:2px}
+[hidden]{display:none!important}
 .chips{display:flex;gap:6px;overflow-x:auto;padding:4px 0 10px;scrollbar-width:none}
 .chips::-webkit-scrollbar{display:none}
 .chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line-strong);background:transparent;color:var(--mute);padding:6px 12px;border-radius:var(--r-sm);font-size:.9rem;font-weight:500;white-space:nowrap;transition:background .15s var(--ease),color .15s var(--ease)}
@@ -342,6 +348,11 @@ const ICO={
   check:'<circle cx="12" cy="12" r="9"/><path d="M8 12.5l2.7 2.7L16 9.5"/>',
   cross:'<circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/>',
   cal:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  dog:'<path d="M8 6H6.5C5 6 4 7.5 4 10v3.5c0 1 .8 1.8 1.8 1.5L8 14M16 6h1.5C19 6 20 7.5 20 10v3.5c0 1-.8 1.8-1.8 1.5L16 14"/><path d="M8 5h8v10a4 4 0 0 1-8 0z"/><circle cx="10.4" cy="10" r=".8"/><circle cx="13.6" cy="10" r=".8"/><path d="M11 14h2"/>',
+  cat:'<path d="M5 19V6l4 3h6l4-3v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1z"/><circle cx="9.5" cy="13" r=".8"/><circle cx="14.5" cy="13" r=".8"/><path d="M11 16l1 .8 1-.8M3 14h3M18 14h3"/>',
+  bird:'<circle cx="14.5" cy="7.5" r="3"/><path d="M12.2 9.6C8 11 6 14.5 5 20l5.5-2c4.5-.5 6.5-3.5 6.5-7.5"/><path d="M17.5 7l3 1-3 1.2"/><circle cx="15" cy="7" r=".6"/><path d="M9 14c1.5.2 3 1 4 2.5"/>',
+  rodent:'<circle cx="7" cy="8" r="2.2"/><circle cx="12.5" cy="7" r="2.2"/><ellipse cx="11" cy="14" rx="7" ry="5"/><circle cx="14.5" cy="12.5" r=".8"/><path d="M17.5 13.5l2 .5M4 17l-2 1"/>',
+  rabbit:'<path d="M9 3c-1.5 0-2 2-1.5 5l1 3M15 3c1.5 0 2 2 1.5 5l-1 3"/><circle cx="12" cy="15" r="5"/><circle cx="10" cy="14" r=".8"/><circle cx="14" cy="14" r=".8"/><path d="M11 17l1 .6 1-.6"/>',
   book:'<path d="M6 3h9l4 4v14H6z"/><path d="M9 12h7M9 16h7"/>'
 };
 const ic=(n,c='')=>`<svg class="i ${c}" viewBox="0 0 24 24" aria-hidden="true">${ICO[n]||ICO.generic}</svg>`;
@@ -357,6 +368,17 @@ const CATS={
   millepatte:{n:'Mille-pattes',e:ic('millepatte'),feed:5,water:3,clean:30,t:[22,27],h:[70,85]},
   lezard:{n:'Lézard / Gecko',e:ic('lizard'),feed:3,water:2,clean:7,t:[24,32],h:[40,70]},
   amphibien:{n:'Amphibien',e:ic('frog'),feed:3,water:1,clean:7,t:[20,26],h:[70,95]},
+  chien:{n:'Chien',e:ic('dog'),feed:1,water:1,clean:7,t:[15,25],h:[40,60]},
+  chat:{n:'Chat',e:ic('cat'),feed:1,water:1,clean:1,t:[15,25],h:[40,60]},
+  oiseau:{n:'Oiseau',e:ic('bird'),feed:1,water:1,clean:3,t:[18,26],h:[40,60]},
+  hamster:{n:'Hamster',e:ic('rodent'),feed:1,water:1,clean:7,t:[18,24],h:[40,60]},
+  souris:{n:'Souris',e:ic('rodent'),feed:1,water:1,clean:7,t:[18,24],h:[40,60]},
+  rat:{n:'Rat',e:ic('rodent'),feed:1,water:1,clean:7,t:[18,24],h:[40,60]},
+  gerbille:{n:'Gerbille',e:ic('rodent'),feed:1,water:1,clean:14,t:[18,24],h:[35,55]},
+  cobaye:{n:'Cobaye',e:ic('rodent'),feed:1,water:1,clean:3,t:[18,24],h:[40,60]},
+  chinchilla:{n:'Chinchilla',e:ic('rodent'),feed:1,water:1,clean:7,t:[15,22],h:[30,50]},
+  lapin:{n:'Lapin',e:ic('rabbit'),feed:1,water:1,clean:3,t:[10,22],h:[40,60]},
+  rongeur:{n:'Autre rongeur',e:ic('rodent'),feed:1,water:1,clean:7,t:[18,24],h:[40,60]},
   autre:{n:'Autre',e:ic('generic'),feed:7,water:3,clean:14,t:[20,28],h:[50,80]}
 };
 const TYPES={
@@ -380,7 +402,7 @@ function load(){
   try{const r=localStorage.getItem(KEY);if(r){S=JSON.parse(r);if(S.demo)S=blank();migrate();return}}catch(e){memOnly=true}
   S=blank();migrate();
 }
-function save(){S.rev=Date.now();try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){memOnly=true}driveDirty()}
+function save(){S.rev=Date.now();try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){memOnly=true}driveDirty();clearTimeout(notifT);notifT=setTimeout(()=>{if(typeof notifSyncCache==='function')notifSyncCache()},1000)}
 function migrate(){delete S.demo;if(!S.theme||S.theme==='auto')S.theme='dark';S.plans=S.plans||[];S.presets=S.presets||{};S.tasks=S.tasks||[];S.rev=S.rev||0}
 const hasData=()=>S.animals.length||S.logs.length||S.tasks.length||S.plans.length;
 
@@ -645,10 +667,39 @@ function age(s){if(!s)return'';const d=diffDays(new Date(),dt(s));if(d<0)return'
 /* ============ Logique métier ============ */
 const logsOf=(aid,type)=>S.logs.filter(l=>l.aid===aid&&(!type||l.type===type)).sort((a,b)=>b.date.localeCompare(a.date));
 const lastLog=(aid,type)=>logsOf(aid,type)[0];
+const WD_ORDER=[1,2,3,4,5,6,0],WD_S=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
 function taskDue(t){
   const l=lastLog(t.aid,t.type);
   const base=l?startDay(dt(l.date)):startDay(dt(t.start));
+  if(t.days&&t.days.length){
+    const d=new Date(base);if(l)d.setDate(d.getDate()+1);
+    for(let i=0;i<8;i++){if(t.days.includes(d.getDay()))return d;d.setDate(d.getDate()+1)}
+    return d;
+  }
   return new Date(base.getTime()+t.every*DAY);
+}
+function taskFreq(t){
+  if(t.days&&t.days.length){
+    if(t.days.length===7)return 'tous les jours';
+    return WD_ORDER.filter(d=>t.days.includes(d)).map(d=>WD_S[d]).join(' · ');
+  }
+  return t.every===1?'tous les jours':`tous les ${t.every} j`;
+}
+const cap=x=>x.charAt(0).toUpperCase()+x.slice(1);
+function freqFields(t){
+  const dm=!!(t.days&&t.days.length);
+  return `<label>Fréquence</label><select name="mode"><option value="every" ${dm?'':'selected'}>Tous les X jours</option><option value="days" ${dm?'selected':''}>Certains jours de la semaine</option></select>
+  <div class="fq-every" ${dm?'hidden':''}><label>Répéter tous les (jours)</label><input name="every" type="number" min="1" value="${t.every||3}"></div>
+  <div class="fq-days" ${dm?'':'hidden'}><label>Jours</label><div class="wd">${WD_ORDER.map(d=>`<label><input type="checkbox" name="d" value="${d}" ${dm&&t.days.includes(d)?'checked':''}><span>${WD_S[d]}</span></label>`).join('')}</div></div>`;
+}
+function freqWire(el){
+  const m=el.querySelector('[name=mode]');
+  m.onchange=()=>{el.querySelector('.fq-every').hidden=m.value!=='every';el.querySelector('.fq-days').hidden=m.value!=='days'};
+}
+function freqRead(form){
+  const fd=new FormData(form),mode=fd.get('mode');
+  if(mode==='days'){const days=fd.getAll('d').map(Number);if(!days.length){toast('Choisis au moins un jour','err');return null}return {days,every:Math.max(1,+fd.get('every')||1)}}
+  return {days:null,every:Math.max(1,+fd.get('every')||1)};
 }
 function taskState(t){
   const n=diffDays(taskDue(t),new Date());
@@ -688,6 +739,17 @@ const CARE={
   millepatte:{molt:45,lay:0,hatch:0,diet:"Légumes, fruits, feuilles ; protéines occasionnelles.",hyd:"Substrat humide, point d'eau.",sub:"Terreau + écorces, 10 cm ou plus.",tips:"Humidité stable. Attention aux espèces à venin ou irritantes."},
   lezard:{molt:30,lay:0,hatch:0,diet:"Insectes saupoudrés de calcium / vitamines selon l'espèce ; fruits pour certains geckos.",hyd:"Brumisation ou bol d'eau selon l'espèce.",sub:"Selon l'espèce (désertique ou tropical).",tips:"Point chaud + zone fraîche. UVB si l'espèce en a besoin."},
   amphibien:{molt:21,lay:0,hatch:0,diet:"Insectes vivants adaptés à la taille, saupoudrés de calcium.",hyd:"Eau déchlorée ; brumisation fréquente.",sub:"Substrat humide (coco, mousse).",tips:"Ne pas manipuler à mains sèches. Eau propre indispensable."},
+  chien:{molt:0,lay:0,hatch:0,diet:"Croquettes ou ration adaptées à l'âge et au poids, en 1 à 2 repas. Eau fraîche en permanence.",hyd:"Gamelle d'eau propre renouvelée chaque jour.",sub:"Panier propre, lavé régulièrement.",tips:"Sorties quotidiennes, vaccins et vermifuge à jour. Pas de chocolat, raisin, oignon ni xylitol."},
+  chat:{molt:0,lay:0,hatch:0,diet:"Croquettes ou pâtée adaptées à l'âge, en plusieurs petits repas. Eau fraîche.",hyd:"Plusieurs points d'eau propres ; fontaine appréciée.",sub:"Litière nettoyée chaque jour, changée en entier chaque semaine.",tips:"Vaccins, vermifuge et antiparasitaire à jour. Griffoir et perchoirs. Plantes toxiques (lys) à bannir."},
+  oiseau:{molt:365,lay:30,hatch:18,diet:"Mélange de graines adapté à l'espèce, granulés, fruits et légumes frais. Os de seiche.",hyd:"Eau propre changée chaque jour ; bain proposé régulièrement.",sub:"Fond de cage propre (papier ou sable) changé souvent.",tips:"Pas d'avocat ni de téflon chauffé. Éviter les courants d'air. Lumière naturelle et sommeil de 10 à 12 h."},
+  hamster:{molt:0,lay:0,hatch:0,diet:"Mélange de graines, un peu de légumes frais et de protéines (vers de farine) occasionnelles.",hyd:"Biberon ou gamelle d'eau propre chaque jour.",sub:"Litière épaisse (≥ 15 cm) pour creuser, abris, grande roue silencieuse.",tips:"Animal nocturne : ne pas le réveiller en journée. Un seul hamster par cage (espèces solitaires)."},
+  souris:{molt:0,lay:0,hatch:0,diet:"Mélange de graines et blocs pour rongeurs, un peu de légumes frais.",hyd:"Biberon propre chaque jour.",sub:"Litière épaisse, abris, roue, matériaux à ronger.",tips:"Très sociale (mêmes sexes ensemble). Éviter la manipulation par la queue."},
+  rat:{molt:0,lay:0,hatch:0,diet:"Blocs ou mélange pour rats, légumes frais, protéines occasionnelles. Éviter sucreries et agrumes pour les mâles.",hyd:"Biberon ou gamelle propre chaque jour.",sub:"Grande cage en hauteur, litière, hamacs, cachettes.",tips:"Très sociable : vit au moins à deux. Sorties et jeux quotidiens."},
+  gerbille:{molt:0,lay:0,hatch:0,diet:"Mélange de graines, un peu de légumes frais et de foin.",hyd:"Biberon ; elle boit peu.",sub:"Très épaisse couche de litière ou terreau pour creuser, bain de sable.",tips:"Vit en couple ou en groupe. Bain de sable chinchilla (pas de poussière fine)."},
+  cobaye:{molt:0,lay:0,hatch:0,diet:"Foin à volonté, granulés pour cobayes, légumes riches en vitamine C chaque jour.",hyd:"Eau fraîche en gamelle lourde ou biberon propre.",sub:"Litière absorbante changée souvent, grand espace au sol.",tips:"Ne produit pas sa vitamine C. Vit en groupe de même sexe. Ongles et dents à surveiller."},
+  chinchilla:{molt:0,lay:0,hatch:0,diet:"Foin à volonté et granulés pour chinchillas ; très peu de friandises.",hyd:"Eau propre en biberon, changée chaque jour.",sub:"Cage haute et grande, étagères, bois à ronger.",tips:"Bain de sable 2 à 3 fois par semaine (jamais d'eau). Craint la chaleur au-dessus de 25 °C."},
+  lapin:{molt:90,lay:0,hatch:0,diet:"Foin à volonté (80 % de la ration), légumes feuillus, peu de granulés.",hyd:"Gamelle d'eau propre, changée chaque jour.",sub:"Litière propre, grand espace pour courir ; abris.",tips:"Vaccins (myxomatose, VHD). Dents et ongles à surveiller. Ne vit pas seul de préférence."},
+  rongeur:{molt:0,lay:0,hatch:0,diet:"Aliment adapté à l'espèce, foin et légumes frais selon le régime.",hyd:"Eau propre renouvelée chaque jour.",sub:"Litière absorbante, abris, matériaux à ronger.",tips:"Renseigne-toi sur les besoins de ton espèce (sociabilité, température, régime)."},
   autre:{molt:0,lay:0,hatch:0,diet:"",hyd:"",sub:"",tips:""}
 };
 function P(cat){
@@ -870,10 +932,10 @@ function presetSheet(cat){
 }
 function editTaskSheet(id){
   const t=S.tasks.find(x=>x.id===id);if(!t)return;
-  sheet(`<h3>${TYPES[t.type].e} ${TYPES[t.type].n}</h3><form id="et"><label>Répéter tous les (jours)</label><input name="every" type="number" min="1" value="${t.every}" required>
+  sheet(`<h3>${TYPES[t.type].e} ${TYPES[t.type].n}</h3><form id="et">${freqFields(t)}
   <div class="grid2" style="margin-top:14px"><button type="button" class="btn sec" data-close>Annuler</button><button class="btn">Enregistrer</button></div></form>`,el=>{
     el.querySelector('[data-close]').onclick=closeSheet;
-    el.querySelector('#et').onsubmit=ev=>{ev.preventDefault();t.every=Math.max(1,+new FormData(ev.target).get('every'));save();closeSheet();render()};
+    freqWire(el);el.querySelector('#et').onsubmit=ev=>{ev.preventDefault();const r=freqRead(ev.target);if(!r)return;t.every=r.every;if(r.days)t.days=r.days;else delete t.days;save();closeSheet();render()};
   });
 }
 
@@ -1066,7 +1128,7 @@ function vToday(){
   const late=tasks.filter(x=>x.s.k==='late').length;
   const hello=new Date().getHours()<18?'Bonjour':'Bonsoir';
   let h=`<h1>${hello}</h1><p class="sub">${new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'numeric',month:'long'})}</p>`+backupAlert();
-  if(!S.animals.length){h+=`<div class="card hero"><div class="ico">${ic('generic')}</div><h2>Bienvenue dans Jurassic Feed</h2><p>Ajoute ton premier animal pour suivre repas, mues, mesures et reproduction. Tout est enregistré automatiquement dans ton Google Drive.</p><button class="btn" data-act="newAnimal">${ic('plus')} Ajouter mon premier animal</button></div>`;return h}
+  if(!S.animals.length){h+=`<div class="card hero"><div class="ico">${ic('generic')}</div><h2>Bienvenue dans Jurassic Feed</h2><p>Ajoute ton premier animal pour suivre repas, mues, mesures et reproduction. Tout est enregistré automatiquement dans le cloud.</p><button class="btn" data-act="newAnimal">${ic('plus')} Ajouter mon premier animal</button></div>`;return h}
   h+=`<div class="grid3"><div class="card stat"><b>${alive.length}</b><div class="muted">animaux</div></div>
    <div class="card stat ${late?'bad':''}"><b>${late}</b><div class="muted">en retard</div></div>
    <div class="card stat"><b>${tasks.length-late}</b><div class="muted">à faire</div></div></div>`;
@@ -1075,7 +1137,7 @@ function vToday(){
   tasks.forEach(({t,s})=>{
     const a=A(t.aid),ty=TYPES[t.type];
     const lab=s.k==='late'?`<span class="badge late">retard ${-s.n} j</span>`:s.k==='today'?`<span class="badge warn">aujourd'hui</span>`:`<span class="badge">demain</span>`;
-    h+=`<div class="card row">${avatar(a)}<div class="sp"><b class="ell">${ty.e} ${ty.n} · ${esc(a.name)}</b><div class="muted">${lab} tous les ${t.every} j</div></div>
+    h+=`<div class="card row">${avatar(a)}<div class="sp"><b class="ell">${ty.e} ${ty.n} · ${esc(a.name)}</b><div class="muted">${lab} ${taskFreq(t)}</div></div>
     <button class="btn sm" data-act="doTask" data-id="${t.id}">Fait</button></div>`;
   });
   const up=allEvents().map((e,i)=>[e,i]).filter(([e])=>e.src!=='real'&&diffDays(e.date,new Date())<=14&&diffDays(e.date,new Date())>=-7).slice(0,3);
@@ -1171,6 +1233,8 @@ function vSettings(){
   <button class="btn sec block" data-act="restoreFile" style="margin-top:8px">${ic('download')} Restaurer depuis un fichier</button>
   <p class="muted" style="margin:12px 0 0">${bkLabel()}</p>
   <div class="grid2" style="margin-top:12px"><button class="btn sec sm" data-act="export">Copier le texte</button><button class="btn sec sm" data-act="import">Coller le texte</button></div></div>
+  <h2>Notifications</h2>
+  <div class="card notifCard">${notifCardHTML()}</div>
   <h2>Application</h2>
   <div class="card">${appCardHTML()}</div>
   <h2>Données</h2>
@@ -1204,7 +1268,7 @@ function vDetail(a){
   if(view.dtab==='lignee')h+=vLignee(a);
   if(view.dtab==='rappels'){
     const ts=S.tasks.filter(t=>t.aid===a.id);
-    h+=ts.map(t=>{const s=taskState(t),ty=TYPES[t.type];return `<div class="card row" data-act="editTask" data-id="${t.id}" style="cursor:pointer"><div class="sp"><b>${ty.e} ${ty.n}</b><div class="muted">Tous les ${t.every} j · ${s.k==='late'?`<span class="badge late">retard ${-s.n} j</span>`:s.k==='today'?`<span class="badge warn">aujourd'hui</span>`:`dans ${s.n} j`}</div></div><button class="x" data-act="delTask" data-id="${t.id}">${ic('x')}</button></div>`}).join('')||`<div class="card empty"><div class="ico">${ic('cal')}</div>Aucun rappel.</div>`;
+    h+=ts.map(t=>{const s=taskState(t),ty=TYPES[t.type];return `<div class="card row" data-act="editTask" data-id="${t.id}" style="cursor:pointer"><div class="sp"><b>${ty.e} ${ty.n}</b><div class="muted">${cap(taskFreq(t))} · ${s.k==='late'?`<span class="badge late">retard ${-s.n} j</span>`:s.k==='today'?`<span class="badge warn">aujourd'hui</span>`:`dans ${s.n} j`}</div></div><button class="x" data-act="delTask" data-id="${t.id}">${ic('x')}</button></div>`}).join('')||`<div class="card empty"><div class="ico">${ic('cal')}</div>Aucun rappel.</div>`;
     h+=`<button class="btn block" data-act="newTask" data-id="${a.id}">${ic('plus')} Ajouter un rappel</button>`;
   }
   return h;
@@ -1320,11 +1384,11 @@ function animalSheet(id,pre={}){
 function parentOpts(sel,except){return `<option value="">— Inconnu —</option>`+S.animals.filter(x=>x.id!==except).map(x=>`<option value="${x.id}" ${x.id===sel?'selected':''}>${esc(x.name)}${x.sex?' ('+esc(x.sex)+')':''}</option>`).join('')}
 function taskSheet(aid){
   sheet(`<h3>Nouveau rappel</h3><form id="tf"><label>Type</label><select name="type">${TASKABLE.map(k=>`<option value="${k}">${TYPES[k].n}</option>`).join('')}</select>
-   <label>Répéter tous les (jours)</label><input name="every" type="number" min="1" value="3" required>
+   ${freqFields({every:3})}
    <div class="grid2" style="margin-top:14px"><button type="button" class="btn sec" data-close>Annuler</button><button class="btn">Ajouter</button></div></form>`,el=>{
-    el.querySelector('[data-close]').onclick=closeSheet;
-    el.querySelector('#tf').onsubmit=ev=>{ev.preventDefault();const f=Object.fromEntries(new FormData(ev.target));
-      S.tasks.push({id:uid(),aid,type:f.type,every:Math.max(1,+f.every),start:nowLocal()});save();closeSheet();render()};
+    el.querySelector('[data-close]').onclick=closeSheet;freqWire(el);
+    el.querySelector('#tf').onsubmit=ev=>{ev.preventDefault();const f=Object.fromEntries(new FormData(ev.target));const r=freqRead(ev.target);if(!r)return;
+      const nt={id:uid(),aid,type:f.type,every:r.every,start:nowLocal()};if(r.days)nt.days=r.days;S.tasks.push(nt);save();closeSheet();render()};
   });
 }
 function confirmSheet(msg,ok){
@@ -1378,11 +1442,84 @@ window.addEventListener('appinstalled',()=>{installEv=null;toast('Application in
 const isStandalone=()=>{try{return matchMedia('(display-mode: standalone)').matches||navigator.standalone===true}catch(e){return false}};
 let persisted=null;
 if(navigator.storage&&navigator.storage.persist){navigator.storage.persist().then(v=>{persisted=v;try{if(view.tab==='settings')render()}catch(e){}}).catch(()=>{})}
+/* ============ Notifications ============
+   Sans serveur : l'application prévient quand elle est ouverte ou rouverte, et Android peut la réveiller
+   de temps en temps (synchronisation périodique, sans garantie) grâce à une copie des échéances gardée dans le cache. */
+const APP_VER='2.1';
+const NOTIF_KEY=KEY+'.notif';
+var notifT=null;
+const notifCfg=()=>{try{return {on:false,hour:9,...JSON.parse(localStorage.getItem(NOTIF_KEY)||'{}')}}catch(e){return {on:false,hour:9}}};
+const setNotif=c=>{try{localStorage.setItem(NOTIF_KEY,JSON.stringify(c))}catch(e){}};
+const notifSupported=()=>'Notification' in window;
+const notifOK=()=>notifSupported()&&Notification.permission==='granted'&&notifCfg().on;
+const dueItems=()=>S.tasks.filter(t=>A(t.aid)&&A(t.aid).status==='alive').map(t=>({ts:startDay(taskDue(t)).getTime(),label:`${TYPES[t.type].n} · ${A(t.aid).name}`}));
+const todayStr=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+async function cacheLast(){try{const c=await caches.open('jf-data');const r=await c.match('jf-due.json');if(r){const o=await r.json();return o.last||''}}catch(e){}return ''}
+async function notifSyncCache(){
+  try{
+    if(!window.caches||!S)return;
+    const cfg=notifCfg(),last=[cfg.last||'',await cacheLast()].sort().pop();
+    const c=await caches.open('jf-data');
+    await c.put('jf-due.json',new Response(JSON.stringify({on:notifOK(),hour:cfg.hour,items:dueItems(),last}),{headers:{'Content-Type':'application/json'}}));
+  }catch(e){}
+}
+async function showNotif(title,body){
+  const opt={body,icon:'icon-192.png',badge:'icon-192.png',tag:'jf-daily'};
+  try{const reg=navigator.serviceWorker&&await navigator.serviceWorker.getRegistration();if(reg){await reg.showNotification(title,opt);return true}}catch(e){}
+  try{new Notification(title,opt);return true}catch(e){}
+  return false;
+}
+async function notifCheck(){
+  if(!S||!notifOK())return;
+  const cfg=notifCfg(),td=todayStr();
+  if(new Date().getHours()<cfg.hour)return;
+  const last=[cfg.last||'',await cacheLast()].sort().pop();
+  if(last>=td)return;
+  const end=startDay(new Date()).getTime();
+  const items=dueItems().filter(i=>i.ts<=end);
+  if(!items.length)return;
+  const late=items.filter(i=>i.ts<end).length;
+  const title=`Jurassic Feed · ${items.length} à faire${late?` (${late} en retard)`:''}`;
+  const body=items.slice(0,4).map(i=>i.label).join('\n')+(items.length>4?`\n+ ${items.length-4} autres`:'');
+  if(await showNotif(title,body)){cfg.last=td;setNotif(cfg);notifSyncCache()}
+}
+async function periodicReg(){
+  try{const reg=await navigator.serviceWorker.ready;if(reg.periodicSync){if(notifOK())await reg.periodicSync.register('jf-due',{minInterval:6*3600*1000});else await reg.periodicSync.unregister('jf-due')}}catch(e){}
+}
+async function notifToggle(){
+  const cfg=notifCfg();
+  if(cfg.on){cfg.on=false;setNotif(cfg);await notifSyncCache();periodicReg();toast('Notifications désactivées');renderNotif();return}
+  if(!notifSupported()){toast("Notifications non prises en charge ici",'err');return}
+  let p=Notification.permission;
+  if(p==='default')p=await Notification.requestPermission();
+  if(p!=='granted'){toast("Notifications refusées : autorise-les dans les réglages du navigateur",'err');renderNotif();return}
+  cfg.on=true;cfg.last='';setNotif(cfg);await notifSyncCache();periodicReg();toast('Notifications activées ✔');renderNotif();notifCheck();
+}
+function notifCardHTML(){
+  const cfg=notifCfg();
+  if(!notifSupported())return `<p class="muted" style="margin:0">Ce navigateur ne propose pas les notifications. Sur iPhone, installe d'abord l'application sur l'écran d'accueil.</p>`;
+  const denied=Notification.permission==='denied';
+  let h=`<p class="muted" style="margin:0 0 10px">${denied?"Les notifications sont bloquées pour ce site : autorise-les dans les réglages du navigateur (cadenas de l'adresse → Notifications), puis reviens ici.":cfg.on&&Notification.permission==='granted'?`Un rappel par jour à partir de ${cfg.hour} h indique les tâches à faire ou en retard.`:"Reçois un rappel quotidien des tâches à faire (repas, eau, nettoyage…)."}</p>`;
+  if(!denied){
+    h+=`<button class="btn ${cfg.on?'sec':''} block" data-act="notifToggle">${ic('alert')} ${cfg.on&&Notification.permission==='granted'?'Désactiver les notifications':'Activer les notifications'}</button>`;
+    if(cfg.on&&Notification.permission==='granted'){
+      h+=`<label>Heure du rappel</label><select data-act="notifHour">${Array.from({length:18},(_,i)=>i+5).map(x=>`<option value="${x}" ${x===cfg.hour?'selected':''}>${x} h</option>`).join('')}</select>
+      <button class="btn sec block" data-act="notifTest" style="margin-top:8px">Envoyer une notification de test</button>`;
+    }
+  }
+  h+=`<p class="muted" style="margin:12px 0 0;font-size:.85rem">Sans serveur, l'alerte part quand l'application est ouverte ou rouverte après l'heure choisie ; Android peut aussi la réveiller de temps en temps en arrière-plan quand elle est installée, sans garantie.</p>`;
+  return h;
+}
+function renderNotif(){document.querySelectorAll('.notifCard').forEach(c=>c.innerHTML=notifCardHTML())}
+setInterval(()=>notifCheck(),60000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')notifCheck()});
+window.addEventListener('load',()=>setTimeout(()=>{notifSyncCache();notifCheck();periodicReg()},2500));
 function appCardHTML(){
   let h='';
   if(isStandalone())h+=`<p class="muted" style="margin:0 0 10px">${ic('check')} Application installée sur cet appareil.</p>`;
   else if(installEv)h+=`<button class="btn block" data-act="install">${ic('plus')} Installer l'application</button>`;
   else h+=`<p class="muted" style="margin:0 0 10px">Pour l'installer sur Android : menu ⋮ de Chrome → « Installer l'application » (ou « Ajouter à l'écran d'accueil »).</p>`;
+  h+=`<p class="muted" style="margin:10px 0 0">Version ${APP_VER}</p>`;
   h+=`<p class="muted" style="margin:10px 0 0">${persisted===true?'Stockage protégé : Android évite de supprimer automatiquement tes données.':'Stockage non protégé : si tu vides les données du navigateur, tout est effacé. Garde une sauvegarde à jour.'}</p>`;
   return h;
 }
@@ -1392,7 +1529,18 @@ function backupAlert(){
   if(t&&d<14)return '';
   return `<div class="alert warn" role="alert">${ic('alert')}<div><b>Pense à sauvegarder.</b> ${t?`Dernière sauvegarde il y a ${d} j.`:'Aucune sauvegarde sur fichier.'} Si tu vides le navigateur ou changes de téléphone, tes données seraient perdues.<div style="margin-top:10px"><button class="btn sm" data-act="backupFile">Enregistrer une sauvegarde</button></div></div></div>`;
 }
-if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){window.addEventListener('load',()=>{try{navigator.serviceWorker.register('sw.js').catch(()=>{})}catch(e){}})}
+if('serviceWorker' in navigator&&/^https?:$/.test(location.protocol)){
+  const hadSW=!!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange',()=>{
+    if(!hadSW)return;
+    if(document.querySelector('.sheet')){toast("Nouvelle version prête : rouvre l'application");return}
+    location.reload();
+  });
+  window.addEventListener('load',()=>{try{navigator.serviceWorker.register('sw.js').then(reg=>{
+    reg.update().catch(()=>{});
+    document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')reg.update().catch(()=>{})});
+  }).catch(()=>{})}catch(e){}})
+}
 function importSheet(){
   sheet(`<h3>Importer</h3><p class="muted">Colle ici un export Jurassic Feed. Cela remplace les données actuelles.</p><textarea id="im" style="min-height:160px;font-size:.75rem"></textarea>
   <div class="grid2" style="margin-top:12px"><button class="btn sec" data-close>Annuler</button><button class="btn" id="go">Importer</button></div>`,el=>{
@@ -1441,6 +1589,8 @@ document.addEventListener('click',e=>{
     case'syncInfo':return syncSheet();
     case'backupFile':return backupFile();
     case'restoreFile':return restoreFile();
+    case'notifToggle':return notifToggle();
+    case'notifTest':return showNotif('Jurassic Feed','Les notifications fonctionnent ✔').then(ok=>{if(!ok)toast('Impossible d\'afficher la notification','err')});
     case'install':{if(!installEv)return;installEv.prompt();installEv.userChoice.finally(()=>{installEv=null;render()});return}
     case'fbsave':{const t=el.closest('.syncCard').querySelector('textarea');const c=parseFbCfg(t?t.value:'');
       if(!c){toast('Configuration non reconnue : colle tout le bloc firebaseConfig','err');return}
@@ -1459,6 +1609,7 @@ document.addEventListener('change',e=>{
   if(el.dataset.act==='jAnimal'){view.ja=el.value;render()}
   if(el.dataset.act==='statAnimal'){view.sa=el.value;render()}
   if(el.dataset.act==='theme'){S.theme=el.value;save();render()}
+  if(el.dataset.act==='notifHour'){const c=notifCfg();c.hour=+el.value;c.last='';setNotif(c);notifSyncCache();toast('Heure enregistrée ✔')}
 });
 document.addEventListener('input',e=>{
   if(e.target.dataset.act==='search'){view.q=e.target.value;const p=e.target.selectionStart;render();const q=$('#q');q.focus();q.setSelectionRange(p,p)}
