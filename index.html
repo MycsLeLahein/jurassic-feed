@@ -670,8 +670,9 @@ function age(s){if(!s)return'';const d=diffDays(new Date(),dt(s));if(d<0)return'
 const logsOf=(aid,type)=>S.logs.filter(l=>l.aid===aid&&(!type||l.type===type)).sort((a,b)=>b.date.localeCompare(a.date));
 const lastLog=(aid,type)=>logsOf(aid,type)[0];
 const WD_ORDER=[1,2,3,4,5,6,0],WD_S=['Dim','Lun','Mar','Mer','Jeu','Ven','Sam'];
+const taskName=t=>t.custom?(t.label||'Rappel'):TYPES[t.type].n;
 function taskDue(t){
-  const l=lastLog(t.aid,t.type);
+  const l=t.custom?(t.last?{date:t.last}:null):lastLog(t.aid,t.type);
   const base=l?startDay(dt(l.date)):startDay(dt(t.start));
   if(t.days&&t.days.length){
     const d=new Date(base);if(l)d.setDate(d.getDate()+1);
@@ -732,7 +733,7 @@ function summarize(l){
     case'size':return `${d.v} cm`;
     case'clean':return d.what||'Nettoyage';
     case'health':return [`${d.kind||'Santé'}${d.txt?' : '+d.txt:''}`,+d.cost>0?eur(d.cost):''].filter(Boolean).join(' · ');
-    case'breed':return `${d.kind||'Reproduction'}${d.count?' ('+d.count+')':''}${d.partner&&A(d.partner)?' avec '+A(d.partner).name:''}`;
+    case'breed':return `${d.kind||'Reproduction'}${d.count?' ('+d.count+')':''}${d.partner&&A(d.partner)?' avec '+A(d.partner).name:d.partnerTxt?' avec '+d.partnerTxt:''}`;
     case'env':return `${d.t!==''&&d.t!=null?d.t+' °C':''}${d.t!==''&&d.t!=null&&d.h!==''&&d.h!=null?' · ':''}${d.h!==''&&d.h!=null?d.h+' % HR':''}`;
     case'handle':return d.min?`${d.min} min`:'Manipulation';
     default:return 'Note';
@@ -964,10 +965,10 @@ function presetSheet(cat){
 }
 function editTaskSheet(id){
   const t=S.tasks.find(x=>x.id===id);if(!t)return;
-  sheet(`<h3>${TYPES[t.type].e} ${TYPES[t.type].n}</h3><form id="et">${freqFields(t)}
+  sheet(`<h3>${TYPES[t.type].e} ${esc(taskName(t))}</h3><form id="et">${t.custom?`<label>Intitulé</label><input name="label" value="${esc(t.label||'')}" required maxlength="80">`:''}${freqFields(t)}
   <div class="grid2" style="margin-top:14px"><button type="button" class="btn sec" data-close>Annuler</button><button class="btn">Enregistrer</button></div></form>`,el=>{
     el.querySelector('[data-close]').onclick=closeSheet;
-    freqWire(el);el.querySelector('#et').onsubmit=ev=>{ev.preventDefault();const r=freqRead(ev.target);if(!r)return;t.every=r.every;if(r.days)t.days=r.days;else delete t.days;save();closeSheet();render()};
+    freqWire(el);el.querySelector('#et').onsubmit=ev=>{ev.preventDefault();const r=freqRead(ev.target);if(!r)return;t.every=r.every;if(r.days)t.days=r.days;else delete t.days;if(t.custom){const lb=(new FormData(ev.target).get('label')||'').trim();if(lb)t.label=lb}save();closeSheet();render()};
   });
 }
 
@@ -1068,8 +1069,8 @@ function vLignee(a){
   h+=`</div>`;
   const sibs=S.animals.filter(x=>x.id!==a.id&&((a.sire&&x.sire===a.sire)||(a.dam&&x.dam===a.dam)));
   if(sibs.length)h+=`<h2>Fratrie</h2><div class="card">${sibs.map(x=>{const full=a.sire&&a.dam&&x.sire===a.sire&&x.dam===a.dam;return `<div class="row" data-act="open" data-id="${x.id}" style="padding:5px 0;cursor:pointer">${avatar(x)}<div class="sp"><b>${esc(x.name)}</b><div class="muted">${full?'Frère / sœur':'Demi-frère / demi-sœur'}</div></div></div>`}).join('')}</div>`;
-  const mates=breedLogs(a.id,['Accouplement']);
-  if(mates.length)h+=`<h2>Accouplements</h2><div class="card">${mates.map(l=>{const pid=l.aid===a.id?l.data?.partner:l.aid,p=A(pid);return `<div class="log"><div class="ic">${ic('mate')}</div><div class="sp"><b>${p?esc(p.name):'Partenaire inconnu'}</b><div class="muted">${fmtD(l.date)}</div></div></div>`}).join('')}</div>`;
+  const brs=breedLogs(a.id);
+  h+=`<h2>Reproduction</h2>`+(brs.length?`<div class="card">${brs.map(l=>{const pid=l.aid===a.id?l.data?.partner:l.aid,p=A(pid),pn=p?p.name:(l.aid===a.id?l.data?.partnerTxt:'')||'';return `<div class="log"><div class="ic">${ic(l.data?.kind==='Accouplement'?'mate':'breed')}</div><div class="sp"><b>${esc(l.data?.kind||'Reproduction')}${pn?' · avec '+esc(pn):''}${l.data?.count?' · '+esc(l.data.count):''}</b><div class="muted">${fmtD(l.date)}</div>${l.note?`<div style="font-size:.9rem;margin-top:2px">${esc(l.note)}</div>`:''}</div></div>`}).join('')}</div>`:`<div class="card muted">Aucun événement enregistré (accouplement, ${famOf(a.cat)==='mam'?'chaleurs, mise bas':'ponte, éclosion'}…).</div>`)+`<button class="btn sec block" data-act="quick" data-type="breed" data-aid="${a.id}">${ic('plus')} Ajouter un événement de reproduction</button>`;
   const kids=S.animals.filter(x=>x.sire===a.id||x.dam===a.id).sort((x,y)=>(y.birth||'').localeCompare(x.birth||''));
   h+=`<h2>Descendants${kids.length?` (${kids.length})`:''}</h2>`;
   h+=kids.length?`<div class="card">${kids.map(x=>{const o=A(x.sire===a.id?x.dam:x.sire);return `<div class="row" data-act="open" data-id="${x.id}" style="padding:5px 0;cursor:pointer">${avatar(x)}<div class="sp"><b>${esc(x.name)}</b><div class="muted">${x.birth?'né(e) '+fmtD(x.birth)+' · ':''}${o?'avec '+esc(o.name):''}</div></div></div>`}).join('')}</div>`:`<div class="card muted">Aucun descendant enregistré.</div>`;
@@ -1079,7 +1080,8 @@ function vLignee(a){
 function newChild(id){
   const a=A(id),mate=breedLogs(id,['Accouplement'])[0];
   const pid=mate?(mate.aid===id?mate.data?.partner:mate.aid):'';
-  const mine=isF(a)?{dam:id,sire:pid||''}:{sire:id,dam:pid||''};
+  const ptxt=!pid&&mate&&mate.aid===id?(mate.data?.partnerTxt||''):'';
+  const mine=isF(a)?{dam:id,sire:pid||'',sireTxt:ptxt}:{sire:id,dam:pid||'',damTxt:ptxt};
   animalSheet(null,{cat:a.cat,species:a.species,origin:'Élevage perso',qty:1,birth:nowLocal().slice(0,10),lineage:a.lineage||'',enc:{...(a.enc||{})},...mine});
 }
 
@@ -1167,9 +1169,9 @@ function vToday(){
   h+=`<h2>À faire</h2>`;
   if(!tasks.length)h+=`<div class="card empty"><div class="ico">${ic('check')}</div>Rien à faire pour le moment.</div>`;
   tasks.forEach(({t,s})=>{
-    const a=A(t.aid),ty=TYPES[t.type];
+    const a=A(t.aid),ty=TYPES[t.type],tn=taskName(t);
     const lab=s.k==='late'?`<span class="badge late">retard ${-s.n} j</span>`:s.k==='today'?`<span class="badge warn">aujourd'hui</span>`:`<span class="badge">demain</span>`;
-    h+=`<div class="card row">${avatar(a)}<div class="sp"><b class="ell">${ty.e} ${ty.n} · ${esc(a.name)}</b><div class="muted">${lab} ${taskFreq(t)}</div></div>
+    h+=`<div class="card row">${avatar(a)}<div class="sp"><b class="ell">${ty.e} ${esc(tn)} · ${esc(a.name)}</b><div class="muted">${lab} ${taskFreq(t)}</div></div>
     <button class="btn sm" data-act="doTask" data-id="${t.id}">Fait</button></div>`;
   });
   const up=allEvents().map((e,i)=>[e,i]).filter(([e])=>e.src!=='real'&&diffDays(e.date,new Date())<=14&&diffDays(e.date,new Date())>=-7).slice(0,3);
@@ -1291,7 +1293,7 @@ function vDetail(a){
   if(view.dtab==='infos'){
     const e=a.enc||{};
     const ed=(key,label,disp)=>`<dt>${label}</dt><dd class="ed" data-act="editField" data-id="${a.id}" data-v="${key}">${disp?esc(disp):'<span class="muted">Ajouter…</span>'} ${ic('edit')}</dd>`;
-    h+=`<div class="card"><dl class="kv">${ed('name','Nom',a.name)}${ed('species','Espèce',a.species)}${ed('cat','Catégorie',c.n)}${ed('sex','Sexe / type',a.sex)}${ed('birth',lbl(a.cat).birth,a.birth?`${fmtD(a.birth)} (${age(a.birth)})`:'')}${ed('acquired','Acquisition',a.acquired?fmtD(a.acquired):'')}${ed('origin','Origine',a.origin)}${ed('qty','Effectif',a.qty>1?String(a.qty):'1')}${ed('status','Statut',STATUS[a.status])}</dl></div>`;
+    h+=`<div class="card"><dl class="kv">${ed('name','Nom',a.name)}${ed('species',famOf(a.cat)==='mam'?'Race':'Espèce',a.species)}${ed('cat','Catégorie',c.n)}${ed('sex','Sexe / type',a.sex)}${ed('birth',lbl(a.cat).birth,a.birth?`${fmtD(a.birth)} (${age(a.birth)})`:'')}${ed('acquired','Acquisition',a.acquired?fmtD(a.acquired):'')}${ed('origin','Origine',a.origin)}${ed('qty','Effectif',a.qty>1?String(a.qty):'1')}${ed('status','Statut',STATUS[a.status])}</dl></div>`;
     h+=infoExtra(a);
     h+=vetCard(a);
     h+=`<h2>Terrarium / habitat</h2><div class="card"><dl class="kv">${ed('enc.dims','Dimensions',e.dims)}${ed('enc.substrate','Substrat',e.substrate)}${ed('enc.heat','Chauffage',e.heat)}${ed('enc.light','Éclairage',e.light)}${ed('temp','Température cible',e.tmin!==''&&e.tmin!=null?`${e.tmin}–${e.tmax} °C`:'')}${ed('hum','Humidité cible',e.hmin!==''&&e.hmin!=null?`${e.hmin}–${e.hmax} %`:'')}</dl>${envAlert(a)}</div>`;
@@ -1307,7 +1309,7 @@ function vDetail(a){
   if(view.dtab==='lignee')h+=vLignee(a);
   if(view.dtab==='rappels'){
     const ts=S.tasks.filter(t=>t.aid===a.id);
-    h+=ts.map(t=>{const s=taskState(t),ty=TYPES[t.type];return `<div class="card row" data-act="editTask" data-id="${t.id}" style="cursor:pointer"><div class="sp"><b>${ty.e} ${ty.n}</b><div class="muted">${cap(taskFreq(t))} · ${s.k==='late'?`<span class="badge late">retard ${-s.n} j</span>`:s.k==='today'?`<span class="badge warn">aujourd'hui</span>`:`dans ${s.n} j`}</div></div><button class="x" data-act="delTask" data-id="${t.id}">${ic('x')}</button></div>`}).join('')||`<div class="card empty"><div class="ico">${ic('cal')}</div>Aucun rappel.</div>`;
+    h+=ts.map(t=>{const s=taskState(t),ty=TYPES[t.type];return `<div class="card row" data-act="editTask" data-id="${t.id}" style="cursor:pointer"><div class="sp"><b>${ty.e} ${esc(taskName(t))}</b><div class="muted">${cap(taskFreq(t))} · ${s.k==='late'?`<span class="badge late">retard ${-s.n} j</span>`:s.k==='today'?`<span class="badge warn">aujourd'hui</span>`:`dans ${s.n} j`}</div></div><button class="x" data-act="delTask" data-id="${t.id}">${ic('x')}</button></div>`}).join('')||`<div class="card empty"><div class="ico">${ic('cal')}</div>Aucun rappel.</div>`;
     h+=`<button class="btn block" data-act="newTask" data-id="${a.id}">${ic('plus')} Ajouter un rappel</button>`;
   }
   return h;
@@ -1342,7 +1344,7 @@ function fieldsFor(type,aid){
       <label>Médicaments / traitement</label><textarea name="meds" style="min-height:64px" placeholder="Nom, dose, durée : un par ligne&#10;Ex. Metacam 0,5 ml/j pendant 5 jours"></textarea>
       <div class="grid2"><div><label>Prix (€)</label><input name="cost" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00"></div><div><label>Vétérinaire</label><input name="vet" placeholder="Nom ou clinique"></div></div>
       <label>Prochain RDV / rappel (optionnel)</label><input name="next" type="date">`;
-    case'breed':return sel({l:'Événement',k:'kind'},LBL[fam].breed)+`<label>Partenaire (optionnel)</label><select name="partner"><option value="">—</option>${S.animals.filter(x=>x.id!==aid).map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('')}</select><label>Nombre (optionnel)</label><input name="count" inputmode="numeric">`;
+    case'breed':return sel({l:'Événement',k:'kind'},LBL[fam].breed)+`<label>Partenaire (dans l'application)</label><select name="partner"><option value="">—</option>${S.animals.filter(x=>x.id!==aid).map(x=>`<option value="${x.id}">${esc(x.name)}${x.species?' · '+esc(x.species):''}</option>`).join('')}</select><label>Ou partenaire extérieur (nom, ${fam==='mam'?'race':'espèce'})</label><input name="partnerTxt" maxlength="80" placeholder="${fam==='mam'?'Ex. Max, Labrador':'Ex. mâle d\'un ami, Python regius'}"><label>Nombre (optionnel)</label><input name="count" inputmode="numeric">`;
     case'env':return `<div class="grid2"><div><label>Température (°C)</label><input name="t" type="number" step="0.1" inputmode="decimal"></div><div><label>Humidité (%)</label><input name="h" type="number" step="1" inputmode="numeric"></div></div>`;
     case'handle':return `<label>Durée (min)</label><input name="min" type="number" min="0" inputmode="numeric">`;
     default:return '';
@@ -1379,7 +1381,7 @@ function animalSheet(id,pre={}){
   <label>Nom *</label><input name="name" required value="${esc(a.name)}">
   <div class="grid2"><div><label>Catégorie</label><select name="cat">${Object.entries(CATS).map(([k,c])=>`<option value="${k}" ${k===a.cat?'selected':''}>${c.n}</option>`).join('')}</select></div>
   <div><label>Effectif (colonie)</label><input name="qty" type="number" min="1" value="${a.qty||1}"></div></div>
-  <label>Espèce (nom latin / commun)</label><input name="species" value="${esc(a.species)}" placeholder="Ex. Python regius">
+  <label id="spl">${famOf(a.cat)==='mam'?'Race':'Espèce (nom latin / commun)'}</label><input name="species" value="${esc(a.species)}" placeholder="${famOf(a.cat)==='mam'?'Ex. Labrador, Européen, Syrien…':'Ex. Python regius'}">
   <div class="grid2"><div><label>Sexe / type</label>${sexField(a.sex)}</div>
   <div><label>Statut</label><select name="status">${Object.entries(STATUS).map(([k,n])=>`<option value="${k}" ${k===a.status?'selected':''}>${n}</option>`).join('')}</select></div></div>
   <div class="grid2"><div><label>${lbl(a.cat).birth}</label><input type="date" name="birth" value="${esc(a.birth)}"></div><div><label>Date d'acquisition</label><input type="date" name="acquired" value="${esc(a.acquired)}"></div></div>
@@ -1430,12 +1432,15 @@ function animalSheet(id,pre={}){
 }
 function parentOpts(sel,except){return `<option value="">— Inconnu —</option>`+S.animals.filter(x=>x.id!==except).map(x=>`<option value="${x.id}" ${x.id===sel?'selected':''}>${esc(x.name)}${x.sex?' ('+esc(x.sex)+')':''}</option>`).join('')}
 function taskSheet(aid){
-  sheet(`<h3>Nouveau rappel</h3><form id="tf"><label>Type</label><select name="type">${TASKABLE.map(k=>`<option value="${k}">${TYPES[k].n}</option>`).join('')}</select>
+  sheet(`<h3>Nouveau rappel</h3><form id="tf"><label>Type</label><select name="type">${TASKABLE.map(k=>`<option value="${k}">${TYPES[k].n}</option>`).join('')}<option value="custom">Autre : je l'écris…</option></select>
+   <div class="fq-label" hidden><label>Intitulé du rappel</label><input name="label" maxlength="80" placeholder="Ex. Vermifuge, couper les griffes, changer l'ampoule UV"></div>
    ${freqFields({every:3})}
    <div class="grid2" style="margin-top:14px"><button type="button" class="btn sec" data-close>Annuler</button><button class="btn">Ajouter</button></div></form>`,el=>{
     el.querySelector('[data-close]').onclick=closeSheet;freqWire(el);
-    el.querySelector('#tf').onsubmit=ev=>{ev.preventDefault();const f=Object.fromEntries(new FormData(ev.target));const r=freqRead(ev.target);if(!r)return;
-      const nt={id:uid(),aid,type:f.type,every:r.every,start:nowLocal()};if(r.days)nt.days=r.days;S.tasks.push(nt);save();closeSheet();render()};
+    const tf=el.querySelector('#tf');tf.elements.type.onchange=()=>{el.querySelector('.fq-label').hidden=tf.elements.type.value!=='custom'};
+    tf.onsubmit=ev=>{ev.preventDefault();const f=Object.fromEntries(new FormData(ev.target));const r=freqRead(ev.target);if(!r)return;
+      if(f.type==='custom'&&!(f.label||'').trim()){toast('Écris l\'intitulé du rappel','err');return}
+      const nt={id:uid(),aid,type:f.type==='custom'?'note':f.type,every:r.every,start:nowLocal()};if(f.type==='custom'){nt.custom=true;nt.label=f.label.trim()}if(r.days)nt.days=r.days;S.tasks.push(nt);save();closeSheet();render()};
   });
 }
 function confirmSheet(msg,ok){
@@ -1492,14 +1497,14 @@ if(navigator.storage&&navigator.storage.persist){navigator.storage.persist().the
 /* ============ Notifications ============
    Sans serveur : l'application prévient quand elle est ouverte ou rouverte, et Android peut la réveiller
    de temps en temps (synchronisation périodique, sans garantie) grâce à une copie des échéances gardée dans le cache. */
-const APP_VER='2.3';
+const APP_VER='2.4';
 const NOTIF_KEY=KEY+'.notif';
 var notifT=null;
 const notifCfg=()=>{try{return {on:false,hour:9,...JSON.parse(localStorage.getItem(NOTIF_KEY)||'{}')}}catch(e){return {on:false,hour:9}}};
 const setNotif=c=>{try{localStorage.setItem(NOTIF_KEY,JSON.stringify(c))}catch(e){}};
 const notifSupported=()=>'Notification' in window;
 const notifOK=()=>notifSupported()&&Notification.permission==='granted'&&notifCfg().on;
-const dueItems=()=>S.tasks.filter(t=>A(t.aid)&&A(t.aid).status==='alive').map(t=>({ts:startDay(taskDue(t)).getTime(),label:`${TYPES[t.type].n} · ${A(t.aid).name}`}));
+const dueItems=()=>S.tasks.filter(t=>A(t.aid)&&A(t.aid).status==='alive').map(t=>({ts:startDay(taskDue(t)).getTime(),label:`${taskName(t)} · ${A(t.aid).name}`}));
 const todayStr=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
 async function cacheLast(){try{const c=await caches.open('jf-data');const r=await c.match('jf-due.json');if(r){const o=await r.json();return o.last||''}}catch(e){}return ''}
 async function notifSyncCache(){
@@ -1628,6 +1633,7 @@ document.addEventListener('click',e=>{
     case'delTask':S.tasks=S.tasks.filter(t=>t.id!==id);save();break;
     case'delLog':return confirmSheet('Supprimer cette entrée ?',()=>{S.logs=S.logs.filter(l=>l.id!==id);save();closeSheet();render()});
     case'doTask':{const t=S.tasks.find(x=>x.id===id);const d={};
+      if(t.custom){t.last=nowLocal();addLog(t.aid,'note',{},'Rappel fait : '+(t.label||''));toast('Bien noté ✔');break}
       if(t.type==='water')d.mode='Brumisation';if(t.type==='feed')d.res='Mangé';if(t.type==='clean')d.what='Nettoyage partiel';
       if(t.type==='weight'||t.type==='env'||t.type==='health'){return quickSheet(t.aid,t.type)}
       addLog(t.aid,t.type,d);toast('Bien noté ✔');break}
@@ -1652,6 +1658,7 @@ document.addEventListener('click',e=>{
   render();
 });
 document.addEventListener('change',e=>{
+  if(e.target.name==='cat'&&e.target.closest('#af')){const m=famOf(e.target.value)==='mam',f=e.target.closest('#af'),l=f.querySelector('#spl'),i=f.elements.species;if(l)l.textContent=m?'Race':'Espèce (nom latin / commun)';if(i)i.placeholder=m?'Ex. Labrador, Européen, Syrien…':'Ex. Python regius'}
   const el=e.target.closest('[data-act]');if(!el)return;
   if(el.dataset.act==='jAnimal'){view.ja=el.value;render()}
   if(el.dataset.act==='statAnimal'){view.sa=el.value;render()}
