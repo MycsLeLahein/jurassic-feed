@@ -389,6 +389,8 @@ const TYPES={
 };
 const TASKABLE=['feed','water','clean','weight','env','health'];
 const STATUS={alive:'Vivant',dead:'Décédé',gone:'Vendu / donné'};
+const PREYS_MAM=['Croquettes','Pâtée','Foin','Granulés','Mélange de graines','Légumes frais','Herbe','Friandise','Os à ronger'];
+const PREYS_BIRD=['Mélange de graines','Granulés','Fruits','Légumes frais','Millet','Pâtée d\'élevage','Os de seiche'];
 const PREYS=['Grillons','Blattes Dubia','Drosophiles','Mouches','Vers de farine','Souris','Rat','Salade','Concombre','Carotte','Courgette','Flocons d\'avoine','Croquettes','Calcium','Poisson-os de seiche'];
 
 /* ============ État & stockage ============ */
@@ -705,6 +707,21 @@ function taskState(t){
   const n=diffDays(taskDue(t),new Date());
   return n<0?{k:'late',n}:n===0?{k:'today',n}:{k:'soon',n};
 }
+function healthLines(l){
+  const d=l.data||{},o=[];
+  if(d.meds)o.push(['Médicaments',d.meds]);
+  if(d.diag)o.push(['Diagnostic',d.diag]);
+  if(d.vet)o.push(['Vétérinaire',d.vet]);
+  return o;
+}
+function vetLogs(aid){return S.logs.filter(l=>l.type==='health'&&(!aid||l.aid===aid)&&(+(l.data||{}).cost>0||(l.data||{}).kind==='Visite véto')).sort((a,b)=>b.date.localeCompare(a.date))}
+function vetCard(a){
+  const v=vetLogs(a.id);if(!v.length)return '';
+  const tot=v.reduce((x,l)=>x+(+(l.data||{}).cost||0),0),y=v.filter(l=>+dt(l.date)>=Date.now()-365*DAY).reduce((x,l)=>x+(+(l.data||{}).cost||0),0);
+  const visits=v.filter(l=>l.data.kind==='Visite véto');
+  const meds=S.logs.filter(l=>l.aid===a.id&&l.type==='health'&&l.data&&l.data.meds).sort((x,y)=>y.date.localeCompare(x.date)).slice(0,3);
+  return `<h2>Suivi vétérinaire</h2><div class="card"><dl class="kv"><dt>Visites</dt><dd>${visits.length}${visits[0]?` · dernière ${fmtD(visits[0].date)}`:''}</dd><dt>Dépensé</dt><dd>${eur(tot)} <span class="muted">(12 mois : ${eur(y)})</span></dd>${meds.length?`<dt>Derniers traitements</dt><dd>${meds.map(l=>`${esc(l.data.meds).replace(/\n/g,' · ')} <span class="muted">${fmtD(l.date)}</span>`).join('<br>')}</dd>`:''}</dl></div>`;
+}
 function summarize(l){
   const d=l.data||{};
   switch(l.type){
@@ -714,7 +731,7 @@ function summarize(l){
     case'weight':return `${d.v} g`;
     case'size':return `${d.v} cm`;
     case'clean':return d.what||'Nettoyage';
-    case'health':return `${d.kind||'Santé'}${d.txt?' : '+d.txt:''}`;
+    case'health':return [`${d.kind||'Santé'}${d.txt?' : '+d.txt:''}`,+d.cost>0?eur(d.cost):''].filter(Boolean).join(' · ');
     case'breed':return `${d.kind||'Reproduction'}${d.count?' ('+d.count+')':''}${d.partner&&A(d.partner)?' avec '+A(d.partner).name:''}`;
     case'env':return `${d.t!==''&&d.t!=null?d.t+' °C':''}${d.t!==''&&d.t!=null&&d.h!==''&&d.h!=null?' · ':''}${d.h!==''&&d.h!=null?d.h+' % HR':''}`;
     case'handle':return d.min?`${d.min} min`:'Manipulation';
@@ -739,17 +756,17 @@ const CARE={
   millepatte:{molt:45,lay:0,hatch:0,diet:"Légumes, fruits, feuilles ; protéines occasionnelles.",hyd:"Substrat humide, point d'eau.",sub:"Terreau + écorces, 10 cm ou plus.",tips:"Humidité stable. Attention aux espèces à venin ou irritantes."},
   lezard:{molt:30,lay:0,hatch:0,diet:"Insectes saupoudrés de calcium / vitamines selon l'espèce ; fruits pour certains geckos.",hyd:"Brumisation ou bol d'eau selon l'espèce.",sub:"Selon l'espèce (désertique ou tropical).",tips:"Point chaud + zone fraîche. UVB si l'espèce en a besoin."},
   amphibien:{molt:21,lay:0,hatch:0,diet:"Insectes vivants adaptés à la taille, saupoudrés de calcium.",hyd:"Eau déchlorée ; brumisation fréquente.",sub:"Substrat humide (coco, mousse).",tips:"Ne pas manipuler à mains sèches. Eau propre indispensable."},
-  chien:{molt:0,lay:0,hatch:0,diet:"Croquettes ou ration adaptées à l'âge et au poids, en 1 à 2 repas. Eau fraîche en permanence.",hyd:"Gamelle d'eau propre renouvelée chaque jour.",sub:"Panier propre, lavé régulièrement.",tips:"Sorties quotidiennes, vaccins et vermifuge à jour. Pas de chocolat, raisin, oignon ni xylitol."},
-  chat:{molt:0,lay:0,hatch:0,diet:"Croquettes ou pâtée adaptées à l'âge, en plusieurs petits repas. Eau fraîche.",hyd:"Plusieurs points d'eau propres ; fontaine appréciée.",sub:"Litière nettoyée chaque jour, changée en entier chaque semaine.",tips:"Vaccins, vermifuge et antiparasitaire à jour. Griffoir et perchoirs. Plantes toxiques (lys) à bannir."},
+  chien:{molt:0,lay:63,hatch:56,diet:"Croquettes ou ration adaptées à l'âge et au poids, en 1 à 2 repas. Eau fraîche en permanence.",hyd:"Gamelle d'eau propre renouvelée chaque jour.",sub:"Panier propre, lavé régulièrement.",tips:"Sorties quotidiennes, vaccins et vermifuge à jour. Pas de chocolat, raisin, oignon ni xylitol."},
+  chat:{molt:0,lay:65,hatch:56,diet:"Croquettes ou pâtée adaptées à l'âge, en plusieurs petits repas. Eau fraîche.",hyd:"Plusieurs points d'eau propres ; fontaine appréciée.",sub:"Litière nettoyée chaque jour, changée en entier chaque semaine.",tips:"Vaccins, vermifuge et antiparasitaire à jour. Griffoir et perchoirs. Plantes toxiques (lys) à bannir."},
   oiseau:{molt:365,lay:30,hatch:18,diet:"Mélange de graines adapté à l'espèce, granulés, fruits et légumes frais. Os de seiche.",hyd:"Eau propre changée chaque jour ; bain proposé régulièrement.",sub:"Fond de cage propre (papier ou sable) changé souvent.",tips:"Pas d'avocat ni de téflon chauffé. Éviter les courants d'air. Lumière naturelle et sommeil de 10 à 12 h."},
-  hamster:{molt:0,lay:0,hatch:0,diet:"Mélange de graines, un peu de légumes frais et de protéines (vers de farine) occasionnelles.",hyd:"Biberon ou gamelle d'eau propre chaque jour.",sub:"Litière épaisse (≥ 15 cm) pour creuser, abris, grande roue silencieuse.",tips:"Animal nocturne : ne pas le réveiller en journée. Un seul hamster par cage (espèces solitaires)."},
-  souris:{molt:0,lay:0,hatch:0,diet:"Mélange de graines et blocs pour rongeurs, un peu de légumes frais.",hyd:"Biberon propre chaque jour.",sub:"Litière épaisse, abris, roue, matériaux à ronger.",tips:"Très sociale (mêmes sexes ensemble). Éviter la manipulation par la queue."},
-  rat:{molt:0,lay:0,hatch:0,diet:"Blocs ou mélange pour rats, légumes frais, protéines occasionnelles. Éviter sucreries et agrumes pour les mâles.",hyd:"Biberon ou gamelle propre chaque jour.",sub:"Grande cage en hauteur, litière, hamacs, cachettes.",tips:"Très sociable : vit au moins à deux. Sorties et jeux quotidiens."},
-  gerbille:{molt:0,lay:0,hatch:0,diet:"Mélange de graines, un peu de légumes frais et de foin.",hyd:"Biberon ; elle boit peu.",sub:"Très épaisse couche de litière ou terreau pour creuser, bain de sable.",tips:"Vit en couple ou en groupe. Bain de sable chinchilla (pas de poussière fine)."},
-  cobaye:{molt:0,lay:0,hatch:0,diet:"Foin à volonté, granulés pour cobayes, légumes riches en vitamine C chaque jour.",hyd:"Eau fraîche en gamelle lourde ou biberon propre.",sub:"Litière absorbante changée souvent, grand espace au sol.",tips:"Ne produit pas sa vitamine C. Vit en groupe de même sexe. Ongles et dents à surveiller."},
-  chinchilla:{molt:0,lay:0,hatch:0,diet:"Foin à volonté et granulés pour chinchillas ; très peu de friandises.",hyd:"Eau propre en biberon, changée chaque jour.",sub:"Cage haute et grande, étagères, bois à ronger.",tips:"Bain de sable 2 à 3 fois par semaine (jamais d'eau). Craint la chaleur au-dessus de 25 °C."},
-  lapin:{molt:90,lay:0,hatch:0,diet:"Foin à volonté (80 % de la ration), légumes feuillus, peu de granulés.",hyd:"Gamelle d'eau propre, changée chaque jour.",sub:"Litière propre, grand espace pour courir ; abris.",tips:"Vaccins (myxomatose, VHD). Dents et ongles à surveiller. Ne vit pas seul de préférence."},
-  rongeur:{molt:0,lay:0,hatch:0,diet:"Aliment adapté à l'espèce, foin et légumes frais selon le régime.",hyd:"Eau propre renouvelée chaque jour.",sub:"Litière absorbante, abris, matériaux à ronger.",tips:"Renseigne-toi sur les besoins de ton espèce (sociabilité, température, régime)."},
+  hamster:{molt:0,lay:16,hatch:21,diet:"Mélange de graines, un peu de légumes frais et de protéines (vers de farine) occasionnelles.",hyd:"Biberon ou gamelle d'eau propre chaque jour.",sub:"Litière épaisse (≥ 15 cm) pour creuser, abris, grande roue silencieuse.",tips:"Animal nocturne : ne pas le réveiller en journée. Un seul hamster par cage (espèces solitaires)."},
+  souris:{molt:0,lay:20,hatch:21,diet:"Mélange de graines et blocs pour rongeurs, un peu de légumes frais.",hyd:"Biberon propre chaque jour.",sub:"Litière épaisse, abris, roue, matériaux à ronger.",tips:"Très sociale (mêmes sexes ensemble). Éviter la manipulation par la queue."},
+  rat:{molt:0,lay:22,hatch:28,diet:"Blocs ou mélange pour rats, légumes frais, protéines occasionnelles. Éviter sucreries et agrumes pour les mâles.",hyd:"Biberon ou gamelle propre chaque jour.",sub:"Grande cage en hauteur, litière, hamacs, cachettes.",tips:"Très sociable : vit au moins à deux. Sorties et jeux quotidiens."},
+  gerbille:{molt:0,lay:25,hatch:21,diet:"Mélange de graines, un peu de légumes frais et de foin.",hyd:"Biberon ; elle boit peu.",sub:"Très épaisse couche de litière ou terreau pour creuser, bain de sable.",tips:"Vit en couple ou en groupe. Bain de sable chinchilla (pas de poussière fine)."},
+  cobaye:{molt:0,lay:68,hatch:21,diet:"Foin à volonté, granulés pour cobayes, légumes riches en vitamine C chaque jour.",hyd:"Eau fraîche en gamelle lourde ou biberon propre.",sub:"Litière absorbante changée souvent, grand espace au sol.",tips:"Ne produit pas sa vitamine C. Vit en groupe de même sexe. Ongles et dents à surveiller."},
+  chinchilla:{molt:0,lay:111,hatch:56,diet:"Foin à volonté et granulés pour chinchillas ; très peu de friandises.",hyd:"Eau propre en biberon, changée chaque jour.",sub:"Cage haute et grande, étagères, bois à ronger.",tips:"Bain de sable 2 à 3 fois par semaine (jamais d'eau). Craint la chaleur au-dessus de 25 °C."},
+  lapin:{molt:0,lay:31,hatch:42,diet:"Foin à volonté (80 % de la ration), légumes feuillus, peu de granulés.",hyd:"Gamelle d'eau propre, changée chaque jour.",sub:"Litière propre, grand espace pour courir ; abris.",tips:"Vaccins (myxomatose, VHD). Dents et ongles à surveiller. Ne vit pas seul de préférence."},
+  rongeur:{molt:0,lay:21,hatch:21,diet:"Aliment adapté à l'espèce, foin et légumes frais selon le régime.",hyd:"Eau propre renouvelée chaque jour.",sub:"Litière absorbante, abris, matériaux à ronger.",tips:"Renseigne-toi sur les besoins de ton espèce (sociabilité, température, régime)."},
   autre:{molt:0,lay:0,hatch:0,diet:"",hyd:"",sub:"",tips:""}
 };
 function P(cat){
@@ -761,7 +778,18 @@ function P(cat){
 /* ============ Cycles, prévisions, agenda ============ */
 const isF=a=>/femelle/i.test(a?.sex||'');
 const isM=a=>/m[âa]le/i.test(a?.sex||'')&&!isF(a);
-const LAY=['Ponte','Cocon / oothèque'],HATCH=['Éclosion','Naissance'];
+const LAY=['Ponte','Cocon / oothèque','Mise bas'],HATCH=['Éclosion','Naissance','Sevrage'];
+/* Familles : les mammifères n'ont ni mue ni œufs (mise bas, sevrage) ; les oiseaux pondent */
+const MAMMALS=['chien','chat','hamster','souris','rat','gerbille','cobaye','chinchilla','lapin','rongeur'];
+const famOf=c=>MAMMALS.includes(c)?'mam':c==='oiseau'?'bird':'exo';
+const LBL={
+  exo:{lay:'Ponte',hatch:'Éclosion',cyL:'Accoupl. → ponte',cyH:'Ponte → éclosion',lineL:'~X j après accouplement',lineH:'~X j après la ponte',birth:'Naissance / éclosion',other:'santé, mue, ponte…',breed:['Accouplement','Ponte','Cocon / oothèque','Éclosion','Naissance']},
+  mam:{lay:'Mise bas',hatch:'Sevrage',cyL:'Accoupl. → mise bas',cyH:'Mise bas → sevrage',lineL:'~X j de gestation après l\'accouplement',lineH:'~X j après la mise bas',birth:'Naissance',other:'santé, chaleurs, mise bas…',breed:['Chaleurs','Accouplement','Gestation confirmée','Mise bas','Sevrage']}
+};
+LBL.bird={...LBL.exo,other:'santé, mue, ponte…',breed:['Accouplement','Ponte','Éclosion']};
+const lbl=c=>LBL[famOf(c)];
+const catOf=aid=>(S.animals.find(a=>a.id===aid)||{}).cat;
+const evN=e=>{const k=EVK[e.kind]||EVK.other;if(e.kind==='lay'||e.kind==='hatch')return lbl(catOf(e.aid))[e.kind];if(e.kind==='other'&&e.log&&e.log.data&&e.log.data.kind)return e.log.data.kind;return k.n};
 const EVK={gear:{e:ic('gear'),n:'Remplacer'},molt:{e:ic('molt'),n:'Mue'},lay:{e:ic('breed'),n:'Ponte'},hatch:{e:ic('hatch'),n:'Éclosion'},mate:{e:ic('mate'),n:'Accouplement'},other:{e:ic('pin'),n:'Événement'}};
 function breedLogs(aid,kinds){
   return S.logs.filter(l=>l.type==='breed'&&(l.aid===aid||l.data?.partner===aid)&&(!kinds||kinds.includes(l.data?.kind))).sort((a,b)=>b.date.localeCompare(a.date));
@@ -806,7 +834,7 @@ function allEvents(){
   S.logs.forEach(l=>{
     if(!A(l.aid))return;
     if(l.type==='molt')out.push({src:'real',kind:'molt',date:dt(l.date),aid:l.aid,log:l});
-    if(l.type==='breed'){const k=l.data?.kind;out.push({src:'real',kind:k==='Accouplement'?'mate':HATCH.includes(k)?'hatch':'lay',date:dt(l.date),aid:l.aid,log:l})}
+    if(l.type==='breed'){const k=l.data?.kind;out.push({src:'real',kind:k==='Accouplement'?'mate':HATCH.includes(k)?'hatch':LAY.includes(k)?'lay':'other',date:dt(l.date),aid:l.aid,log:l})}
   });
   S.plans.forEach(p=>{if(A(p.aid))out.push({src:'plan',kind:p.kind,date:new Date(p.date+'T09:00'),aid:p.aid,plan:p})});
   S.animals.forEach(a=>predictions(a).forEach(p=>out.push({...p,src:'pred'})));
@@ -822,7 +850,7 @@ function evRow(e,i){
   if(e.src==='pred'){tag=`<span class="badge ${urg}">${lab||'Estimé'} · ${esc(e.how)}</span>`;when=relDays(e);btn=`<button class="btn sm" data-act="confirmEv" data-i="${i}">${e.kind==='gear'?'Remplacé':'Confirmer'}</button>`}
   if(e.src==='plan'){tag=`<span class="badge ${urg}">${lab||'Planifié'}</span>`;when=relDays(e);btn=`<button class="btn sm" data-act="confirmEv" data-i="${i}">Fait</button><button class="x" data-act="delPlan" data-id="${e.plan.id}" aria-label="Supprimer">${ic('x')}</button>`}
   const note=e.plan?.note||e.log?.note||'';
-  return `<div class="card row">${avatar(a)}<div class="sp"><b class="ell">${k.e} ${k.n}${e.label?' : '+esc(e.label):''} · ${esc(a.name)}</b><div class="muted">${when}</div><div>${tag}${note?`<span class="muted">${esc(note)}</span>`:''}</div></div>${btn}</div>`;
+  return `<div class="card row">${avatar(a)}<div class="sp"><b class="ell">${k.e} ${evN(e)}${e.label?' : '+esc(e.label):''} · ${esc(a.name)}</b><div class="muted">${when}</div><div>${tag}${note?`<span class="muted">${esc(note)}</span>`:''}</div></div>${btn}</div>`;
 }
 function vAgenda(){
   const now=new Date();
@@ -831,7 +859,7 @@ function vAgenda(){
   const key=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
   const first=new Date(y,m,1),lead=(first.getDay()+6)%7,dim=new Date(y,m+1,0).getDate();
   const byDay={};ev.forEach(e=>{(byDay[key(e.date)]=byDay[key(e.date)]||[]).push(e)});
-  let h=`<h1>Agenda</h1><p class="sub">Mues, pontes, éclosions : passées, estimées et planifiées</p>
+  let h=`<h1>Agenda</h1><p class="sub">Mues, pontes, mises bas, éclosions : passées, estimées et planifiées</p>
   <div class="row"><button class="btn sec sm" data-act="calPrev" aria-label="Mois précédent">${ic('back')}</button><b class="sp" style="text-align:center;text-transform:capitalize">${first.toLocaleDateString('fr-FR',{month:'long',year:'numeric'})}</b><button class="btn sec sm" data-act="calNext" aria-label="Mois suivant">${ic('chev')}</button></div>
   <div class="cal" style="margin-top:8px">${['L','M','M','J','V','S','D'].map(x=>`<div class="h">${x}</div>`).join('')}`;
   for(let i=0;i<lead;i++)h+='<div></div>';
@@ -848,27 +876,31 @@ function vAgenda(){
     h+=`<button class="btn sec block" data-act="newPlan" data-v="${view.day}">${ic('plus')} Planifier ce jour</button>`;
   }
   const up=idx.filter(([e])=>e.src!=='real'&&diffDays(e.date,now)>=-30&&diffDays(e.date,now)<=120);
-  h+=`<h2>À venir</h2>`+(up.length?up.map(([e,i])=>evRow(e,i)).join(''):`<div class="card empty"><div class="ico">${ic('cal')}</div>Aucune échéance. Les mues sont estimées dès 2 mues enregistrées, les pontes après un accouplement.</div>`);
+  h+=`<h2>À venir</h2>`+(up.length?up.map(([e,i])=>evRow(e,i)).join(''):`<div class="card empty"><div class="ico">${ic('cal')}</div>Aucune échéance. Les mues sont estimées dès 2 mues enregistrées ; pontes, éclosions et mises bas après un accouplement.</div>`);
   return h;
 }
 function confirmEvent(i){
   const e=EVS[i];if(!e)return;
   if(e.kind==='gear'){const g=(A(e.aid).gear||[]).find(x=>x.id===e.gid);if(g){g.date=nowLocal().slice(0,10);save();toast('Matériel remplacé ✔');render()}return}
-  const m={molt:['molt',{stage:'Mue réussie'}],lay:['breed',{kind:'Ponte'}],hatch:['breed',{kind:'Éclosion'}],mate:['breed',{kind:'Accouplement'}],other:['note',{}]}[e.kind]||['note',{}];
+  const m={molt:['molt',{stage:'Mue réussie'}],lay:['breed',{kind:lbl(catOf(e.aid)).lay}],hatch:['breed',{kind:lbl(catOf(e.aid)).hatch}],mate:['breed',{kind:'Accouplement'}],other:['note',{}]}[e.kind]||['note',{}];
   quickSheet(e.aid,m[0],{data:m[1],planId:e.plan?.id});
 }
 function planSheet(dateStr,aid){
   const alive=S.animals.filter(a=>a.status==='alive');
   if(!alive.length){toast("Ajoute d'abord un animal");return}
+  const kinds=cat=>Object.entries(EVK).filter(([k])=>!(k==='molt'&&famOf(cat)==='mam')).map(([k,v])=>[k,k==='lay'||k==='hatch'?lbl(cat)[k]:v.n]);
+  const opts=cat=>kinds(cat).map(([k,n])=>`<option value="${k}">${n}</option>`).join('');
   sheet(`<h3>Planifier un événement</h3><form id="plf">
    <label>Animal</label><select name="aid">${alive.map(a=>`<option value="${a.id}" ${a.id===aid?'selected':''}>${esc(a.name)}</option>`).join('')}</select>
-   <label>Type</label><select name="kind">${Object.entries(EVK).map(([k,v])=>`<option value="${k}">${v.n}</option>`).join('')}</select>
+   <label>Type</label><select name="kind">${opts((alive.find(a=>a.id===aid)||alive[0]).cat)}</select>
    <label>Date</label><input type="date" name="date" value="${dateStr||nowLocal().slice(0,10)}" required>
    <label>Note (optionnel)</label><input name="note" placeholder="Ex. mettre au frais, préparer le substrat…">
    <div class="grid2" style="margin-top:14px"><button type="button" class="btn sec" data-close>Annuler</button><button class="btn">Planifier</button></div></form>`,el=>{
     el.querySelector('[data-close]').onclick=closeSheet;
-    el.querySelector('#plf').onsubmit=ev=>{ev.preventDefault();const f=Object.fromEntries(new FormData(ev.target));
-      S.plans.push({id:uid(),aid:f.aid,kind:f.kind,date:f.date,note:f.note});save();closeSheet();toast('Planifié ✔');render()};
+    const f=el.querySelector('#plf');
+    f.elements.aid.onchange=()=>{const k=f.elements.kind.value;f.elements.kind.innerHTML=opts(catOf(f.elements.aid.value));if([...f.elements.kind.options].some(o=>o.value===k))f.elements.kind.value=k};
+    f.onsubmit=ev=>{ev.preventDefault();const v=Object.fromEntries(new FormData(ev.target));
+      S.plans.push({id:uid(),aid:v.aid,kind:v.kind,date:v.date,note:v.note});save();closeSheet();toast('Planifié ✔');render()};
   });
 }
 
@@ -876,7 +908,7 @@ function planSheet(dateStr,aid){
 function upcomingCard(a){
   const own=allEvents().filter(e=>e.aid===a.id&&e.src!=='real'&&diffDays(e.date,new Date())>=-30);
   if(!own.length)return'';
-  return `<h2>Prochaines échéances</h2><div class="card">${own.map(e=>{const k=EVK[e.kind]||EVK.other;return `<div class="row" style="padding:4px 0"><span>${k.e}</span><div class="sp"><b>${k.n}${e.label?' : '+esc(e.label):''}</b> <span class="muted">${relDays(e)}</span></div><span class="badge ${urgOf(e)}">${e.src==='pred'?'estimé':'planifié'}</span></div>`}).join('')}</div>`;
+  return `<h2>Prochaines échéances</h2><div class="card">${own.map(e=>{const k=EVK[e.kind]||EVK.other;return `<div class="row" style="padding:4px 0"><span>${k.e}</span><div class="sp"><b>${evN(e)}${e.label?' : '+esc(e.label):''}</b> <span class="muted">${relDays(e)}</span></div><span class="badge ${urgOf(e)}">${e.src==='pred'?'estimé':'planifié'}</span></div>`}).join('')}</div>`;
 }
 function infoExtra(a){
   const p=P(a.cat),cr=a.care||{},cy=cycle(a);
@@ -886,7 +918,7 @@ function infoExtra(a){
   h+=`<div class="card"><dl class="kv">${rows.map(([l,k])=>{const own=!!cr[k],v=own?cr[k]:p[k];return `<dt>${l}<br><span class="badge">${own?'à moi':'conseillé'}</span></dt><dd>${v?esc(v):'<span class="muted">—</span>'}</dd>`}).join('')}</dl>
   <div class="muted" style="margin-top:8px">Ce qui est « conseillé » est une base générale : adapte-le à ce qui marche chez toi.</div></div>`;
   const line=(k,t)=>cy[k].d>0?`${t.replace('X',cy[k].d)} <span class="badge">${cy[k].src}</span>`:'<span class="muted">non suivi</span>';
-  h+=`<h2>Cycles</h2><div class="card"><dl class="kv"><dt>Mue</dt><dd>${line('molt','tous les ~X j')}</dd>${isM(a)?'':`<dt>Ponte</dt><dd>${line('lay','~X j après accouplement')}</dd><dt>Éclosion</dt><dd>${line('hatch','~X j après la ponte')}</dd>`}</dl></div>`;
+  h+=`<h2>${famOf(a.cat)==='mam'?'Reproduction':'Cycles'}</h2><div class="card"><dl class="kv">${famOf(a.cat)==='mam'?'':`<dt>Mue</dt><dd>${line('molt','tous les ~X j')}</dd>`}${isM(a)?'':`<dt>${lbl(a.cat).lay}</dt><dd>${line('lay',lbl(a.cat).lineL)}</dd><dt>${lbl(a.cat).hatch}</dt><dd>${line('hatch',lbl(a.cat).lineH)}</dd>`}</dl></div>`;
   return h;
 }
 function careSheet(id){
@@ -895,16 +927,16 @@ function careSheet(id){
   const n=(k,l)=>`<div><label>${l}</label><input name="${k}" type="number" min="0" inputmode="numeric" value="${cy[k]??''}" placeholder="auto : ${au[k].d>0?au[k].d:'non suivi'}"></div>`;
   sheet(`<h3>Fiche d'élevage · ${esc(a.name)}</h3><p class="muted">Préremplie avec les valeurs conseillées de la catégorie. Modifie ce qui ne correspond pas à ton expérience.</p>
   <form id="cf2">${ta('diet','Alimentation')}${ta('hyd','Eau & humidité')}${ta('sub','Substrat')}${ta('tips','Conseils / observations')}
-  <h2>Cycles (jours)</h2><div class="grid3">${n('molt','Entre 2 mues')}${n('lay','Accoupl. → ponte')}${n('hatch','Ponte → éclosion')}</div>
+  <h2>Cycles (jours)</h2><div class="${famOf(a.cat)==='mam'?'grid2':'grid3'}">${famOf(a.cat)==='mam'?'':n('molt','Entre 2 mues')}${n('lay',lbl(a.cat).cyL)}${n('hatch',lbl(a.cat).cyH)}</div>
   <p class="muted">Vide = automatique (ta moyenne réelle sinon valeur conseillée). 0 = ne pas suivre.</p>
   <button type="button" class="btn sec block" id="rs">${ic('reset')} Remettre les valeurs conseillées</button>
   <div class="grid2" style="margin-top:14px"><button type="button" class="btn sec" data-close>Annuler</button><button class="btn">Enregistrer</button></div></form>`,el=>{
     const f=el.querySelector('#cf2');
     el.querySelector('[data-close]').onclick=closeSheet;
-    el.querySelector('#rs').onclick=()=>{['diet','hyd','sub','tips'].forEach(k=>f.elements[k].value=p[k]);['molt','lay','hatch'].forEach(k=>f.elements[k].value='')};
+    el.querySelector('#rs').onclick=()=>{['diet','hyd','sub','tips'].forEach(k=>f.elements[k].value=p[k]);['molt','lay','hatch'].forEach(k=>{if(f.elements[k])f.elements[k].value=''})};
     f.onsubmit=ev=>{ev.preventDefault();const v=Object.fromEntries(new FormData(f));
       a.care={};['diet','hyd','sub','tips'].forEach(k=>{if((v[k]||'').trim()!==(p[k]||'').trim())a.care[k]=v[k].trim()});
-      a.cyc={molt:v.molt,lay:v.lay,hatch:v.hatch};save();closeSheet();toast('Fiche enregistrée ✔');render()};
+      a.cyc={molt:v.molt??'',lay:v.lay,hatch:v.hatch};save();closeSheet();toast('Fiche enregistrée ✔');render()};
   });
 }
 function presetsCard(){
@@ -917,7 +949,7 @@ function presetSheet(cat){
   sheet(`<h3>${c.e} ${c.n}</h3><p class="muted">Valeurs de départ pour les nouveaux animaux. Les fiches déjà adaptées ne changent pas.</p><form id="pf2">
   <h2 style="margin-top:8px">Rappels par défaut (jours)</h2><div class="grid3">${n('feed','Repas',p.feed)}${n('water','Eau / brume',p.water)}${n('clean','Nettoyage',p.clean)}</div>
   <h2>Cibles habitat</h2><div class="grid2">${n('tmin','T° min (°C)',p.t[0])}${n('tmax','T° max (°C)',p.t[1])}${n('hmin','Humidité min (%)',p.h[0])}${n('hmax','Humidité max (%)',p.h[1])}</div>
-  <h2>Cycles estimés (jours, 0 = non suivi)</h2><div class="grid3">${n('molt','Entre 2 mues',p.molt)}${n('lay','Accoupl. → ponte',p.lay)}${n('hatch','Ponte → éclosion',p.hatch)}</div>
+  <h2>Cycles estimés (jours, 0 = non suivi)</h2><div class="${famOf(cat)==='mam'?'grid2':'grid3'}">${famOf(cat)==='mam'?'':n('molt','Entre 2 mues',p.molt)}${n('lay',lbl(cat).cyL,p.lay)}${n('hatch',lbl(cat).cyH,p.hatch)}</div>
   <p class="muted">Durées indicatives : elles varient selon l'espèce, la température et l'individu. Avec tes données, l'app utilise ta moyenne réelle.</p>
   ${ta('diet','Alimentation')}${ta('hyd','Eau & humidité')}${ta('sub','Substrat')}${ta('tips','Conseils')}
   <div class="grid2" style="margin-top:14px"><button type="button" class="btn sec" data-close>Annuler</button><button class="btn">Enregistrer</button></div>
@@ -1142,7 +1174,7 @@ function vToday(){
   });
   const up=allEvents().map((e,i)=>[e,i]).filter(([e])=>e.src!=='real'&&diffDays(e.date,new Date())<=14&&diffDays(e.date,new Date())>=-7).slice(0,3);
   if(up.length)h+=`<h2>Prochaines échéances</h2>`+up.map(([e,i])=>evRow(e,i)).join('')+`<button class="btn sec sm block" data-act="tab" data-v="agenda">Voir l'agenda</button>`;
-  h+=`<h2>Raccourcis</h2><div class="qa">${['feed','water','molt','weight'].map(k=>`<button data-act="quick" data-type="${k}"><span>${TYPES[k].e}</span>${TYPES[k].n}</button>`).join('')}</div>`;
+  h+=`<h2>Raccourcis</h2><div class="qa">${(S.animals.some(a=>a.status==='alive')&&S.animals.filter(a=>a.status==='alive').every(a=>famOf(a.cat)==='mam')?['feed','water','weight','health']:['feed','water','molt','weight']).map(k=>`<button data-act="quick" data-type="${k}"><span>${TYPES[k].e}</span>${TYPES[k].n}</button>`).join('')}</div>`;
   const recent=[...S.logs].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,4);
   if(recent.length){h+=`<h2>Dernières entrées</h2><div class="card">${recent.map(logRow).join('')}</div>`}
   return h;
@@ -1173,7 +1205,7 @@ function vAnimals(){
 }
 function logRow(l){
   const a=A(l.aid),ty=TYPES[l.type];
-  return `<div class="log"><div class="ic">${ty.e}</div><div class="sp"><b>${esc(summarize(l))}</b><div class="muted">${a?esc(a.name)+' · ':''}${fmtT(l.date)}</div>${l.note?`<div style="font-size:.9rem;margin-top:2px">${esc(l.note)}</div>`:''}</div><button class="x" data-act="delLog" data-id="${l.id}" aria-label="Supprimer">${ic('x')}</button></div>`;
+  return `<div class="log"><div class="ic">${ty.e}</div><div class="sp"><b>${esc(summarize(l))}</b><div class="muted">${a?esc(a.name)+' · ':''}${fmtT(l.date)}</div>${l.type==='health'?healthLines(l).map(([k,v])=>`<div style="font-size:.9rem;margin-top:2px"><span class="muted">${k} :</span> ${esc(v).replace(/\n/g,'<br>')}</div>`).join(''):''}${l.note?`<div style="font-size:.9rem;margin-top:2px">${esc(l.note)}</div>`:''}</div><button class="x" data-act="delLog" data-id="${l.id}" aria-label="Supprimer">${ic('x')}</button></div>`;
 }
 function vJournal(){
   let logs=[...S.logs].filter(l=>(view.jf==='all'||l.type===view.jf)&&(view.ja==='all'||l.aid===view.ja)).sort((a,b)=>b.date.localeCompare(a.date));
@@ -1201,7 +1233,13 @@ function vStats(){
   <h2>Répartition</h2><div class="card">`;
   Object.entries(byCat).sort((a,b)=>b[1]-a[1]).forEach(([c,n])=>{h+=`<div style="margin:8px 0"><div class="row"><span class="sp">${CATS[c].e} ${CATS[c].n}</span><b>${n}</b></div><div class="bar"><i style="width:${n/total*100}%"></i></div></div>`});
   if(!alive.length)h+=`<div class="muted">Aucun animal.</div>`;
-  h+=`</div><h2>Courbe de poids / taille</h2>`;
+  h+=`</div>`;
+  const vl=vetLogs().filter(l=>A(l.aid)&&+(l.data||{}).cost>0);
+  if(vl.length){
+    const sum=a=>a.reduce((x,l)=>x+(+l.data.cost||0),0),per={};vl.forEach(l=>{(per[l.aid]=per[l.aid]||[]).push(l)});
+    h+=`<h2>Frais vétérinaires</h2><div class="card"><div class="row"><span class="sp">Total</span><b>${eur(sum(vl))}</b></div><div class="row"><span class="sp muted">12 derniers mois</span><b>${eur(sum(vl.filter(l=>+dt(l.date)>=Date.now()-365*DAY)))}</b></div>${Object.entries(per).sort((a,b)=>sum(b[1])-sum(a[1])).map(([id,ls])=>`<div class="row" style="margin-top:6px"><span class="sp">${esc(A(id).name)}</span><span>${eur(sum(ls))}</span></div>`).join('')}</div>`;
+  }
+  h+=`<h2>Courbe de poids / taille</h2>`;
   const meas=alive.filter(a=>logsOf(a.id,'weight').length||logsOf(a.id,'size').length||logsOf(a.id,'env').length);
   if(!meas.length)h+=`<div class="card muted">Enregistre des pesées pour voir l'évolution.</div>`;
   else{
@@ -1247,14 +1285,15 @@ function vDetail(a){
   const c=CATS[a.cat];
   let h=`<div class="row" style="margin:14px 0 0"><button class="btn sec sm" data-act="back">${ic('back')} Retour</button><span class="sp"></span><button class="btn sec sm" data-act="editAnimal" data-id="${a.id}">${ic('edit')} Modifier</button></div>
   <div class="row" style="margin:14px 0">${avatar(a,true)}<div class="sp"><h1 style="margin:0">${esc(a.name)}${a.qty>1?` <span class="muted">×${a.qty}</span>`:''}</h1><div class="muted"><i>${esc(a.species||c.n)}</i></div><div>${a.status!=='alive'?`<span class="badge late">${STATUS[a.status]}</span>`:''}${animalBadges(a)}</div></div></div>
-  <div class="qa">${['feed','water','molt','weight'].map(k=>`<button data-act="quick" data-type="${k}" data-aid="${a.id}"><span>${TYPES[k].e}</span>${TYPES[k].n}</button>`).join('')}</div>
-  <button class="btn sec block" data-act="quick" data-aid="${a.id}">${ic('plus')} Autre entrée (santé, mue, ponte…)</button>
+  <div class="qa">${(famOf(a.cat)==='mam'?['feed','water','weight','health']:['feed','water','molt','weight']).map(k=>`<button data-act="quick" data-type="${k}" data-aid="${a.id}"><span>${TYPES[k].e}</span>${TYPES[k].n}</button>`).join('')}</div>
+  <button class="btn sec block" data-act="quick" data-aid="${a.id}">${ic('plus')} Autre entrée (${lbl(a.cat).other})</button>
   <div class="tabs">${tabs.map(([k,n])=>`<button data-act="dtab" data-v="${k}" class="${view.dtab===k?'on':''}">${n}</button>`).join('')}</div>`;
   if(view.dtab==='infos'){
     const e=a.enc||{};
     const ed=(key,label,disp)=>`<dt>${label}</dt><dd class="ed" data-act="editField" data-id="${a.id}" data-v="${key}">${disp?esc(disp):'<span class="muted">Ajouter…</span>'} ${ic('edit')}</dd>`;
-    h+=`<div class="card"><dl class="kv">${ed('name','Nom',a.name)}${ed('species','Espèce',a.species)}${ed('cat','Catégorie',c.n)}${ed('sex','Sexe / type',a.sex)}${ed('birth','Naissance / éclosion',a.birth?`${fmtD(a.birth)} (${age(a.birth)})`:'')}${ed('acquired','Acquisition',a.acquired?fmtD(a.acquired):'')}${ed('origin','Origine',a.origin)}${ed('qty','Effectif',a.qty>1?String(a.qty):'1')}${ed('status','Statut',STATUS[a.status])}</dl></div>`;
+    h+=`<div class="card"><dl class="kv">${ed('name','Nom',a.name)}${ed('species','Espèce',a.species)}${ed('cat','Catégorie',c.n)}${ed('sex','Sexe / type',a.sex)}${ed('birth',lbl(a.cat).birth,a.birth?`${fmtD(a.birth)} (${age(a.birth)})`:'')}${ed('acquired','Acquisition',a.acquired?fmtD(a.acquired):'')}${ed('origin','Origine',a.origin)}${ed('qty','Effectif',a.qty>1?String(a.qty):'1')}${ed('status','Statut',STATUS[a.status])}</dl></div>`;
     h+=infoExtra(a);
+    h+=vetCard(a);
     h+=`<h2>Terrarium / habitat</h2><div class="card"><dl class="kv">${ed('enc.dims','Dimensions',e.dims)}${ed('enc.substrate','Substrat',e.substrate)}${ed('enc.heat','Chauffage',e.heat)}${ed('enc.light','Éclairage',e.light)}${ed('temp','Température cible',e.tmin!==''&&e.tmin!=null?`${e.tmin}–${e.tmax} °C`:'')}${ed('hum','Humidité cible',e.hmin!==''&&e.hmin!=null?`${e.hmin}–${e.hmax} %`:'')}</dl>${envAlert(a)}</div>`;
     h+=gearCard(a);
     if(a.custom?.length)h+=`<h2>Champs personnalisés</h2><div class="card"><dl class="kv">${a.custom.map(x=>`<dt>${esc(x.k)}</dt><dd>${esc(x.v)}</dd>`).join('')}</dl></div>`;
@@ -1290,15 +1329,20 @@ function envAlert(a){
 /* ============ Formulaires ============ */
 function fieldsFor(type,aid){
   const sel=(n,opts)=>`<label>${n.l}</label><select name="${n.k}">${opts.map(o=>`<option>${o}</option>`).join('')}</select>`;
+  const fam=famOf(catOf(aid));
   switch(type){
-    case'feed':return `<div class="grid2"><div><label>Proie / aliment</label><input name="prey" list="preys" placeholder="Grillons…"></div><div><label>Quantité</label><input name="qty" type="number" min="0" inputmode="numeric"></div></div><datalist id="preys">${PREYS.map(p=>`<option>${p}</option>`).join('')}</datalist>`+sel({l:'Résultat',k:'res'},['Mangé','Partiel','Refusé']);
-    case'water':return sel({l:'Type',k:'mode'},['Brumisation','Eau fraîche','Bain','Arrosage du substrat']);
+    case'feed':return `<div class="grid2"><div><label>Proie / aliment</label><input name="prey" list="preys" placeholder="${fam==='mam'?'Croquettes, foin…':fam==='bird'?'Graines…':'Grillons…'}"></div><div><label>Quantité</label><input name="qty" type="number" min="0" inputmode="numeric"></div></div><datalist id="preys">${(fam==='mam'?PREYS_MAM:fam==='bird'?PREYS_BIRD:PREYS).map(p=>`<option>${p}</option>`).join('')}</datalist>`+sel({l:'Résultat',k:'res'},['Mangé','Partiel','Refusé']);
+    case'water':return sel({l:'Type',k:'mode'},fam==='mam'?['Eau fraîche','Gamelle / biberon nettoyé']:fam==='bird'?['Eau fraîche','Bain','Brumisation']:['Brumisation','Eau fraîche','Bain','Arrosage du substrat']);
     case'molt':return sel({l:'Étape',k:'stage'},['Pré-mue','Mue réussie','Mue difficile','Exuvie retirée']);
-    case'weight':return `<label>Poids (g)</label><input name="v" type="number" step="0.01" min="0" inputmode="decimal" required>`;
+    case'weight':return `<label>Poids (g)</label><input name="v" type="number" step="0.01" min="0" inputmode="decimal" required${['chien','chat','lapin'].includes(catOf(aid))?' placeholder="En grammes, ex. 4200 pour 4,2 kg"':''}>`;
     case'size':return `<label>Taille (cm)</label><input name="v" type="number" step="0.1" min="0" inputmode="decimal" required>`;
-    case'clean':return sel({l:'Action',k:'what'},['Retrait des déchets','Nettoyage partiel','Nettoyage complet','Changement de substrat','Désinfection']);
-    case'health':return sel({l:'Type',k:'kind'},['Observation','Symptôme','Visite véto','Traitement'])+`<label>Détail</label><input name="txt" placeholder="Ex. léthargie, coquille fissurée…">`;
-    case'breed':return sel({l:'Événement',k:'kind'},['Accouplement','Ponte','Cocon / oothèque','Éclosion','Naissance'])+`<label>Partenaire (optionnel)</label><select name="partner"><option value="">—</option>${S.animals.filter(x=>x.id!==aid).map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('')}</select><label>Nombre (optionnel)</label><input name="count" inputmode="numeric">`;
+    case'clean':return sel({l:'Action',k:'what'},fam==='mam'?['Retrait des déchets','Nettoyage partiel','Nettoyage complet','Changement de litière','Désinfection']:['Retrait des déchets','Nettoyage partiel','Nettoyage complet','Changement de substrat','Désinfection']);
+    case'health':return sel({l:'Type',k:'kind'},fam==='mam'?['Observation','Symptôme','Visite véto','Traitement','Vaccin','Vermifuge','Antiparasitaire','Stérilisation','Griffes / dents']:['Observation','Symptôme','Visite véto','Traitement'])+`<label>Motif / détail</label><input name="txt" placeholder="${fam==='mam'?'Ex. boite de la patte, rappel de vaccin…':'Ex. léthargie, coquille fissurée…'}">
+      <label>Diagnostic (optionnel)</label><input name="diag" placeholder="Ce qu'a dit le vétérinaire">
+      <label>Médicaments / traitement</label><textarea name="meds" style="min-height:64px" placeholder="Nom, dose, durée : un par ligne&#10;Ex. Metacam 0,5 ml/j pendant 5 jours"></textarea>
+      <div class="grid2"><div><label>Prix (€)</label><input name="cost" type="number" min="0" step="0.01" inputmode="decimal" placeholder="0,00"></div><div><label>Vétérinaire</label><input name="vet" placeholder="Nom ou clinique"></div></div>
+      <label>Prochain RDV / rappel (optionnel)</label><input name="next" type="date">`;
+    case'breed':return sel({l:'Événement',k:'kind'},LBL[fam].breed)+`<label>Partenaire (optionnel)</label><select name="partner"><option value="">—</option>${S.animals.filter(x=>x.id!==aid).map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('')}</select><label>Nombre (optionnel)</label><input name="count" inputmode="numeric">`;
     case'env':return `<div class="grid2"><div><label>Température (°C)</label><input name="t" type="number" step="0.1" inputmode="decimal"></div><div><label>Humidité (%)</label><input name="h" type="number" step="1" inputmode="numeric"></div></div>`;
     case'handle':return `<label>Durée (min)</label><input name="min" type="number" min="0" inputmode="numeric">`;
     default:return '';
@@ -1308,18 +1352,21 @@ function quickSheet(preAid,preType,pre={}){
   const alive=S.animals.filter(a=>a.status==='alive');
   if(!alive.length){toast("Ajoute d'abord un animal");return}
   let type=preType||'feed',aid=preAid||alive[0].id,applied=false;
+  if(type==='molt'&&famOf(catOf(aid))==='mam')type='feed';
   const draw=()=>sheet(`<h3>Nouvelle entrée</h3>
    <label>Animal</label><select id="qa">${alive.map(a=>`<option value="${a.id}" ${a.id===aid?'selected':''}>${esc(a.name)}</option>`).join('')}</select>
-   <div class="chips" style="margin-top:10px">${Object.entries(TYPES).map(([k,t])=>`<button type="button" class="chip ${k===type?'on':''}" data-t="${k}">${t.e} ${t.n}</button>`).join('')}</div>
+   <div class="chips" style="margin-top:10px">${Object.entries(TYPES).filter(([k])=>!(k==='molt'&&famOf(catOf(aid))==='mam')).map(([k,t])=>`<button type="button" class="chip ${k===type?'on':''}" data-t="${k}">${t.e} ${t.n}</button>`).join('')}</div>
    <form id="qf">${fieldsFor(type,aid)}<label>Date et heure</label><input name="date" type="datetime-local" value="${nowLocal()}" required><label>Note (optionnel)</label><textarea name="note" style="min-height:56px"></textarea>
    <div class="grid2" style="margin-top:14px"><button type="button" class="btn sec" data-close>Annuler</button><button class="btn">Enregistrer</button></div></form>`,el=>{
-    el.querySelector('#qa').onchange=e=>{aid=e.target.value;if(type==='breed')draw()};
+    el.querySelector('#qa').onchange=e=>{const of=famOf(catOf(aid));aid=e.target.value;if(famOf(catOf(aid))!==of){if(type==='molt'&&famOf(catOf(aid))==='mam')type='feed';draw()}else if(type==='breed')draw()};
     el.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{type=b.dataset.t;draw()});
     el.querySelector('[data-close]').onclick=closeSheet;
     if(!applied){applied=true;const qf=el.querySelector('#qf');Object.entries(pre.data||{}).forEach(([k,v])=>{if(qf[k])qf[k].value=v})}
     el.querySelector('#qf').onsubmit=ev=>{ev.preventDefault();
-      const fd=Object.fromEntries(new FormData(ev.target));const {date,note,...data}=fd;
-      addLog(aid,type,data,note,date);if(pre.planId){S.plans=S.plans.filter(p=>p.id!==pre.planId);save()}closeSheet();toast('Enregistré ✔');render()};
+      const fd=Object.fromEntries(new FormData(ev.target));const {date,note,next,...data}=fd;
+      Object.keys(data).forEach(k=>{if(data[k]==='')delete data[k]});
+      addLog(aid,type,data,note,date);
+      if(type==='health'&&next)S.plans.push({id:uid(),aid,kind:'other',date:next,note:'Véto : '+(data.txt||data.kind||'rendez-vous')});if(pre.planId){S.plans=S.plans.filter(p=>p.id!==pre.planId);save()}closeSheet();toast('Enregistré ✔');render()};
   });
   draw();
 }
@@ -1335,7 +1382,7 @@ function animalSheet(id,pre={}){
   <label>Espèce (nom latin / commun)</label><input name="species" value="${esc(a.species)}" placeholder="Ex. Python regius">
   <div class="grid2"><div><label>Sexe / type</label>${sexField(a.sex)}</div>
   <div><label>Statut</label><select name="status">${Object.entries(STATUS).map(([k,n])=>`<option value="${k}" ${k===a.status?'selected':''}>${n}</option>`).join('')}</select></div></div>
-  <div class="grid2"><div><label>Naissance / éclosion</label><input type="date" name="birth" value="${esc(a.birth)}"></div><div><label>Date d'acquisition</label><input type="date" name="acquired" value="${esc(a.acquired)}"></div></div>
+  <div class="grid2"><div><label>${lbl(a.cat).birth}</label><input type="date" name="birth" value="${esc(a.birth)}"></div><div><label>Date d'acquisition</label><input type="date" name="acquired" value="${esc(a.acquired)}"></div></div>
   <label>Origine (éleveur, expo, nature…)</label><input name="origin" value="${esc(a.origin)}">
   <h2>Lignée</h2>
   <div class="grid2"><div><label>Père</label><select name="sire">${parentOpts(a.sire,id)}</select></div><div><label>Mère</label><select name="dam">${parentOpts(a.dam,id)}</select></div>
@@ -1445,7 +1492,7 @@ if(navigator.storage&&navigator.storage.persist){navigator.storage.persist().the
 /* ============ Notifications ============
    Sans serveur : l'application prévient quand elle est ouverte ou rouverte, et Android peut la réveiller
    de temps en temps (synchronisation périodique, sans garantie) grâce à une copie des échéances gardée dans le cache. */
-const APP_VER='2.1';
+const APP_VER='2.3';
 const NOTIF_KEY=KEY+'.notif';
 var notifT=null;
 const notifCfg=()=>{try{return {on:false,hour:9,...JSON.parse(localStorage.getItem(NOTIF_KEY)||'{}')}}catch(e){return {on:false,hour:9}}};
