@@ -1165,15 +1165,18 @@ function vToday(){
   if(!S.animals.length){h+=`<div class="card hero"><div class="ico">${ic('generic')}</div><h2>Bienvenue dans Jurassic Feed</h2><p>Ajoute ton premier animal pour suivre repas, mues, mesures et reproduction. Tout est enregistré automatiquement dans le cloud.</p><button class="btn" data-act="newAnimal">${ic('plus')} Ajouter mon premier animal</button></div>`;return h}
   h+=`<div class="grid3"><div class="card stat"><b>${alive.length}</b><div class="muted">animaux</div></div>
    <div class="card stat ${late?'bad':''}"><b>${late}</b><div class="muted">en retard</div></div>
-   <div class="card stat"><b>${tasks.length-late}</b><div class="muted">à faire</div></div></div>`;
-  h+=`<h2>À faire</h2>`;
-  if(!tasks.length)h+=`<div class="card empty"><div class="ico">${ic('check')}</div>Rien à faire pour le moment.</div>`;
-  tasks.forEach(({t,s})=>{
+   <div class="card stat"><b>${tasks.filter(x=>x.s.n===0).length}</b><div class="muted">à faire</div></div></div>`;
+  const todayT=tasks.filter(x=>x.s.n<=0),tomT=tasks.filter(x=>x.s.n===1);
+  const taskCard=({t,s})=>{
     const a=A(t.aid),ty=TYPES[t.type],tn=taskName(t);
     const lab=s.k==='late'?`<span class="badge late">retard ${-s.n} j</span>`:s.k==='today'?`<span class="badge warn">aujourd'hui</span>`:`<span class="badge">demain</span>`;
-    h+=`<div class="card row">${avatar(a)}<div class="sp"><b class="ell">${ty.e} ${esc(tn)} · ${esc(a.name)}</b><div class="muted">${lab} ${taskFreq(t)}</div></div>
-    <button class="btn sm" data-act="doTask" data-id="${t.id}">Fait</button></div>`;
-  });
+    return `<div class="card row">${avatar(a)}<div class="sp"><b class="ell">${ty.e} ${esc(tn)} · ${esc(a.name)}</b><div class="muted">${lab} ${taskFreq(t)}</div></div>
+    <button class="btn ${s.n>0?'sec ':''}sm" data-act="doTask" data-id="${t.id}">Fait</button></div>`;
+  };
+  h+=`<h2>À faire</h2>`;
+  if(!todayT.length)h+=`<div class="card empty"><div class="ico">${ic('check')}</div>Rien à faire aujourd'hui.</div>`;
+  h+=todayT.map(taskCard).join('');
+  if(tomT.length)h+=`<h2>À venir · demain</h2>`+tomT.map(taskCard).join('');
   const up=allEvents().map((e,i)=>[e,i]).filter(([e])=>e.src!=='real'&&diffDays(e.date,new Date())<=14&&diffDays(e.date,new Date())>=-7).slice(0,3);
   if(up.length)h+=`<h2>Prochaines échéances</h2>`+up.map(([e,i])=>evRow(e,i)).join('')+`<button class="btn sec sm block" data-act="tab" data-v="agenda">Voir l'agenda</button>`;
   h+=`<h2>Raccourcis</h2><div class="qa">${(S.animals.some(a=>a.status==='alive')&&S.animals.filter(a=>a.status==='alive').every(a=>famOf(a.cat)==='mam')?['feed','water','weight','health']:['feed','water','molt','weight']).map(k=>`<button data-act="quick" data-type="${k}"><span>${TYPES[k].e}</span>${TYPES[k].n}</button>`).join('')}</div>`;
@@ -1497,7 +1500,7 @@ if(navigator.storage&&navigator.storage.persist){navigator.storage.persist().the
 /* ============ Notifications ============
    Sans serveur : l'application prévient quand elle est ouverte ou rouverte, et Android peut la réveiller
    de temps en temps (synchronisation périodique, sans garantie) grâce à une copie des échéances gardée dans le cache. */
-const APP_VER='2.4';
+const APP_VER='2.5';
 const NOTIF_KEY=KEY+'.notif';
 var notifT=null;
 const notifCfg=()=>{try{return {on:false,hour:9,...JSON.parse(localStorage.getItem(NOTIF_KEY)||'{}')}}catch(e){return {on:false,hour:9}}};

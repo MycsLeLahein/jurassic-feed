@@ -1,6 +1,6 @@
 /* Jurassic Feed — fonctionnement hors ligne.
    Incrémente VERSION à chaque nouvelle version de l'application pour forcer la mise à jour. */
-const VERSION='jf-v6';
+const VERSION='jf-v7';
 const SHELL=['./','./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png'];
 self.addEventListener('install',e=>{
   e.waitUntil(caches.open(VERSION).then(c=>c.addAll(SHELL.map(u=>new Request(u,{cache:'reload'})))).then(()=>self.skipWaiting()));
